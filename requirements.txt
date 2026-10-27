@@ -1,0 +1,10 @@
+opencv-python>=4.8
+numpy>=1.24
+requests>=2.31
+yt-dlp>=2024.1.0
+torch>=2.1
+torchvision>=0.16
+
+# Optional, for notebook-based inspection:
+# matplotlib>=3.7
+# jupyter>=1.0

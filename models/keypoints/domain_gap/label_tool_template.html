@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WLASL Keypoint Labeling</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5b6475; --line: #dde1e8;
+    --accent: #2563eb; --done: #1a9e3f; --skip: #8a93a3; --current: #fff4d6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0 12px 0 0; }
+  header .spacer { flex: 1; }
+  input[type=text], input[type=number] { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  input[type=number] { width: 70px; }
+  button { padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  main { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; align-items: flex-start; }
+  .stage { position: relative; background: #000; border-radius: 8px; overflow: hidden; line-height: 0; }
+  #canvas { cursor: crosshair; display: block; max-width: calc(100vw - 32px); height: auto; }
+  #loupe { position: absolute; width: 160px; height: 160px; border: 2px solid #fff; border-radius: 6px; pointer-events: none; display: none; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  aside { flex: 1; min-width: 300px; max-width: 460px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+  .frame-info { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .frame-info b { font-size: 18px; }
+  .rule { background: #eef3ff; border: 1px solid #c9d8ff; border-radius: 6px; padding: 8px 10px; margin: 8px 0 12px; font-size: 13px; }
+  .now { font-size: 15px; margin: 6px 0 10px; padding: 8px 10px; border-radius: 6px; background: var(--current); }
+  ol { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 5px; cursor: pointer; }
+  li:hover { background: #f1f3f7; }
+  li.current { background: var(--current); font-weight: 600; }
+  li .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  li .status { margin-left: auto; font-size: 12px; color: var(--muted); }
+  li .status.done { color: var(--done); }
+  .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .keys { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .progress { color: var(--muted); }
+  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #1d2330; color: #fff; padding: 8px 14px; border-radius: 6px; display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>WLASL keypoint labeling</h1>
+  <label>Your name <input type="text" id="labeler" placeholder="e.g. Priya"></label>
+  <label>Go to frame <input type="number" id="jump" min="1"></label>
+  <span class="progress" id="progress"></span>
+  <span class="spacer"></span>
+  <button id="importBtn">Import labels…</button>
+  <input type="file" id="importFile" accept=".json" hidden>
+  <button class="primary" id="exportBtn">Export labels</button>
+</header>
+<main>
+  <div class="stage">
+    <canvas id="canvas" width="672" height="672"></canvas>
+    <canvas id="loupe" width="160" height="160"></canvas>
+  </div>
+  <aside>
+    <div class="frame-info"><b id="frameTitle"></b><span class="progress" id="frameMeta"></span></div>
+    <div class="rule"><b>Left/right = the signer's own side.</b> The signer's LEFT hand, wrist, elbow and shoulder appear on the
+      <b>image RIGHT</b> when they face the camera (blue). Mouth corners are named by image side.</div>
+    <div class="now" id="now"></div>
+    <ol id="pointList"></ol>
+    <div class="buttons">
+      <button id="skipBtn">Not visible (N)</button>
+      <button id="undoBtn">Undo (Z)</button>
+      <button id="prevBtn">← Prev frame</button>
+      <button id="nextBtn">Next frame →</button>
+      <button id="clearBtn">Clear this frame</button>
+    </div>
+    <div class="keys">Click to place the highlighted point. Click a row to re-do that point.
+      Mark a point <b>Not visible</b> if it is hidden or out of frame — don't guess.
+      Labels save in this browser automatically; <b>Export</b> when you're done and send the file.</div>
+  </aside>
+</main>
+<div id="toast"></div>
+<script>
+const SET = /*__LABEL_SET__*/null;
+const SCALE = 3;            // 224 px frames drawn at 672 px
+const STORE_KEY = "domain_gap_labels:" + SET.set_id;
+const POINTS = SET.points;
+
+let labels = {};            // { frameKey: { pointName: [x, y] | null } }
+let frameIdx = 0;
+let pointIdx = 0;
+let selected = false;       // true when the user picked a row to re-do, even on a finished frame
+let history = [];           // [frameKey, pointName, previousValue]
+const images = SET.frames.map(f => { const im = new Image(); im.src = f.png; return im; });
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const loupe = document.getElementById("loupe");
+const lctx = loupe.getContext("2d");
+
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+    if (saved) { labels = saved.labels || {}; document.getElementById("labeler").value = saved.labeler || ""; frameIdx = saved.frameIdx || 0; }
+  } catch (e) { /* storage unavailable: start fresh */ }
+}
+function save() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({ labels, frameIdx, labeler: document.getElementById("labeler").value }));
+  } catch (e) { /* storage unavailable: export regularly */ }
+}
+
+const frameKey = () => SET.frames[frameIdx].key;
+const frameLabels = () => (labels[frameKey()] = labels[frameKey()] || {});
+const isDone = (fl, name) => Object.prototype.hasOwnProperty.call(fl, name);
+const frameComplete = key => POINTS.every(p => labels[key] && isDone(labels[key], p.name));
+
+function firstOpenPoint() {
+  const fl = frameLabels();
+  const i = POINTS.findIndex(p => !isDone(fl, p.name));
+  return i === -1 ? POINTS.length - 1 : i;
+}
+
+function draw() {
+  const img = images[frameIdx];
+  if (!img.complete) { img.onload = draw; return; }
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const fl = labels[frameKey()] || {};
+  POINTS.forEach((p, i) => {
+    const v = fl[p.name];
+    if (!v) return;
+    const x = v[0] * SCALE, y = v[1] * SCALE;
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = p.color; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = "#fff"; ctx.stroke();
+    ctx.font = "11px system-ui"; ctx.fillStyle = "#fff"; ctx.fillText(String(i + 1), x + 7, y - 6);
+  });
+}
+
+function render() {
+  const f = SET.frames[frameIdx];
+  const fl = labels[f.key] || {};
+  document.getElementById("frameTitle").textContent = `Frame ${frameIdx + 1} / ${SET.frames.length}`;
+  document.getElementById("frameMeta").textContent = `“${f.gloss}” · signer ${f.signer_id} · ${f.key}`;
+  const p = POINTS[pointIdx];
+  const active = selected || !frameComplete(f.key);
+  document.getElementById("now").innerHTML = active
+    ? `Click: <b style="color:${p.color}">${pointIdx + 1}. ${p.hint}</b>`
+    : "✓ This frame is complete — press <b>→</b> for the next one, or click a point to move it.";
+
+  const list = document.getElementById("pointList");
+  list.innerHTML = "";
+  POINTS.forEach((pt, i) => {
+    const li = document.createElement("li");
+    if (i === pointIdx && active) li.className = "current";
+    const v = fl[pt.name];
+    const status = !isDone(fl, pt.name) ? "—" : v === null ? "not visible" : "✓";
+    li.innerHTML = `<span class="dot" style="background:${pt.color}"></span>${i + 1}. ${pt.hint}` +
+      `<span class="status ${isDone(fl, pt.name) ? "done" : ""}">${status}</span>`;
+    li.onclick = () => { pointIdx = i; selected = true; render(); };
+    list.appendChild(li);
+  });
+
+  const complete = SET.frames.filter(fr => frameComplete(fr.key)).length;
+  document.getElementById("progress").textContent = `${complete} / ${SET.frames.length} frames complete`;
+  draw();
+}
+
+function setPoint(value) {
+  const fl = frameLabels();
+  const name = POINTS[pointIdx].name;
+  const wasComplete = frameComplete(frameKey());
+  history.push([frameKey(), name, isDone(fl, name) ? fl[name] : undefined]);
+  fl[name] = value;
+  selected = false;
+  save();
+  if (frameComplete(frameKey())) {
+    // Only move on when this click finished the frame, not when re-doing a point on a finished one.
+    if (!wasComplete && frameIdx < SET.frames.length - 1) { toast("Frame complete"); goFrame(frameIdx + 1); return; }
+    if (!wasComplete) toast("All frames complete — export your labels");
+  } else {
+    pointIdx = firstOpenPoint();
+  }
+  render();
+}
+
+function undo() {
+  const last = history.pop();
+  if (!last) return;
+  const [key, name, prev] = last;
+  frameIdx = SET.frames.findIndex(f => f.key === key);
+  const fl = frameLabels();
+  if (prev === undefined) delete fl[name]; else fl[name] = prev;
+  pointIdx = POINTS.findIndex(p => p.name === name);
+  save(); render();
+}
+
+function goFrame(i) {
+  frameIdx = Math.max(0, Math.min(SET.frames.length - 1, i));
+  selected = false;
+  pointIdx = firstOpenPoint();
+  save(); render();
+}
+
+function canvasPoint(ev) {
+  const r = canvas.getBoundingClientRect();
+  const cx = (ev.clientX - r.left) * (canvas.width / r.width);
+  const cy = (ev.clientY - r.top) * (canvas.height / r.height);
+  return [cx / SCALE, cy / SCALE, cx, cy, r];
+}
+
+canvas.addEventListener("click", ev => {
+  const [x, y] = canvasPoint(ev);
+  if (frameComplete(frameKey()) && !selected) {
+    // Finished frame, no row picked: a click on a placed point selects it for re-doing.
+    const fl = frameLabels();
+    let best = -1, bestD = Infinity;
+    POINTS.forEach((p, i) => { const v = fl[p.name]; if (v) { const d = Math.hypot(v[0] - x, v[1] - y); if (d < bestD) { bestD = d; best = i; } } });
+    if (best !== -1 && bestD <= 4) { pointIdx = best; selected = true; render(); }
+    return;
+  }
+  setPoint([Math.round(x * 10) / 10, Math.round(y * 10) / 10]);
+});
+
+canvas.addEventListener("mousemove", ev => {
+  const [x, y, cx, cy, r] = canvasPoint(ev);
+  const img = images[frameIdx];
+  const src = 32;  // source pixels shown in the loupe
+  lctx.imageSmoothingEnabled = false;
+  lctx.fillStyle = "#000"; lctx.fillRect(0, 0, 160, 160);
+  lctx.drawImage(img, x - src / 2, y - src / 2, src, src, 0, 0, 160, 160);
+  lctx.strokeStyle = "rgba(255,255,0,.9)"; lctx.lineWidth = 1;
+  lctx.beginPath(); lctx.moveTo(80, 70); lctx.lineTo(80, 90); lctx.moveTo(70, 80); lctx.lineTo(90, 80); lctx.stroke();
+  const shown = r.width / canvas.width;
+  loupe.style.display = "block";
+  loupe.style.left = (cx * shown < r.width / 2 ? r.width - 172 : 12) + "px";
+  loupe.style.top = (cy * shown < r.height / 2 ? r.height - 172 : 12) + "px";
+});
+canvas.addEventListener("mouseleave", () => { loupe.style.display = "none"; });
+
+document.addEventListener("keydown", ev => {
+  if (ev.target.tagName === "INPUT") return;
+  if (ev.key === "n" || ev.key === "N") setPoint(null);
+  else if (ev.key === "z" || ev.key === "Z" || ev.key === "Backspace") { ev.preventDefault(); undo(); }
+  else if (ev.key === "ArrowRight" || ev.key === "Enter") goFrame(frameIdx + 1);
+  else if (ev.key === "ArrowLeft") goFrame(frameIdx - 1);
+});
+document.getElementById("skipBtn").onclick = () => setPoint(null);
+document.getElementById("undoBtn").onclick = undo;
+document.getElementById("prevBtn").onclick = () => goFrame(frameIdx - 1);
+document.getElementById("nextBtn").onclick = () => goFrame(frameIdx + 1);
+document.getElementById("clearBtn").onclick = () => {
+  if (!confirm("Clear every point on this frame?")) return;
+  delete labels[frameKey()]; pointIdx = 0; save(); render();
+};
+document.getElementById("labeler").addEventListener("input", save);
+document.getElementById("jump").addEventListener("change", ev => goFrame(parseInt(ev.target.value, 10) - 1));
+
+document.getElementById("exportBtn").onclick = () => {
+  const name = document.getElementById("labeler").value.trim() || "anonymous";
+  const kept = Object.fromEntries(Object.entries(labels).filter(([, v]) => Object.keys(v).length));
+  const blob = new Blob([JSON.stringify({ set_id: SET.set_id, labeler: name, exported_at: new Date().toISOString(), labels: kept }, null, 1)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `domain_gap_labels_${name.replace(/\W+/g, "_")}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+document.getElementById("importBtn").onclick = () => document.getElementById("importFile").click();
+document.getElementById("importFile").onchange = async ev => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    if (data.set_id !== SET.set_id) { alert(`That file is for label set ${data.set_id}, not ${SET.set_id}.`); return; }
+    for (const [key, pts] of Object.entries(data.labels || {})) labels[key] = { ...(labels[key] || {}), ...pts };
+    save(); goFrame(frameIdx); toast(`Imported ${Object.keys(data.labels || {}).length} frames`);
+  } catch (e) { alert("Could not read that file: " + e.message); }
+  ev.target.value = "";
+};
+
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.style.display = "block";
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.style.display = "none"; }, 1400);
+}
+
+load();
+pointIdx = firstOpenPoint();
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,705 @@
+{
+ "set_id": "wlasl-test-100-seed0",
+ "frames": [
+  {
+   "key": "69431:8",
+   "video_id": "69431",
+   "frame": 8,
+   "gloss": "pizza",
+   "signer_id": "117"
+  },
+  {
+   "key": "40126:8",
+   "video_id": "40126",
+   "frame": 8,
+   "gloss": "orange",
+   "signer_id": "47"
+  },
+  {
+   "key": "49173:8",
+   "video_id": "49173",
+   "frame": 8,
+   "gloss": "same",
+   "signer_id": "63"
+  },
+  {
+   "key": "57943:8",
+   "video_id": "57943",
+   "frame": 8,
+   "gloss": "thin",
+   "signer_id": "34"
+  },
+  {
+   "key": "35513:8",
+   "video_id": "35513",
+   "frame": 8,
+   "gloss": "meet",
+   "signer_id": "13"
+  },
+  {
+   "key": "27209:8",
+   "video_id": "27209",
+   "frame": 8,
+   "gloss": "help",
+   "signer_id": "17"
+  },
+  {
+   "key": "31750:8",
+   "video_id": "31750",
+   "frame": 8,
+   "gloss": "kiss",
+   "signer_id": "31"
+  },
+  {
+   "key": "31758:8",
+   "video_id": "31758",
+   "frame": 8,
+   "gloss": "kiss",
+   "signer_id": "5"
+  },
+  {
+   "key": "24636:8",
+   "video_id": "24636",
+   "frame": 8,
+   "gloss": "give",
+   "signer_id": "35"
+  },
+  {
+   "key": "01986:8",
+   "video_id": "01986",
+   "frame": 8,
+   "gloss": "all",
+   "signer_id": "2"
+  },
+  {
+   "key": "30830:8",
+   "video_id": "30830",
+   "frame": 8,
+   "gloss": "jacket",
+   "signer_id": "9"
+  },
+  {
+   "key": "28119:8",
+   "video_id": "28119",
+   "frame": 8,
+   "gloss": "hot",
+   "signer_id": "64"
+  },
+  {
+   "key": "57941:8",
+   "video_id": "57941",
+   "frame": 8,
+   "gloss": "thin",
+   "signer_id": "32"
+  },
+  {
+   "key": "69252:8",
+   "video_id": "69252",
+   "frame": 8,
+   "gloss": "brown",
+   "signer_id": "118"
+  },
+  {
+   "key": "28201:8",
+   "video_id": "28201",
+   "frame": 8,
+   "gloss": "how",
+   "signer_id": "8"
+  },
+  {
+   "key": "17713:8",
+   "video_id": "17713",
+   "frame": 8,
+   "gloss": "drink",
+   "signer_id": "21"
+  },
+  {
+   "key": "08915:8",
+   "video_id": "08915",
+   "frame": 8,
+   "gloss": "candy",
+   "signer_id": "56"
+  },
+  {
+   "key": "69225:8",
+   "video_id": "69225",
+   "frame": 8,
+   "gloss": "basketball",
+   "signer_id": "120"
+  },
+  {
+   "key": "69269:8",
+   "video_id": "69269",
+   "frame": 8,
+   "gloss": "city",
+   "signer_id": "115"
+  },
+  {
+   "key": "13325:8",
+   "video_id": "13325",
+   "frame": 8,
+   "gloss": "corn",
+   "signer_id": "0"
+  },
+  {
+   "key": "68132:8",
+   "video_id": "68132",
+   "frame": 8,
+   "gloss": "pink",
+   "signer_id": "110"
+  },
+  {
+   "key": "63664:8",
+   "video_id": "63664",
+   "frame": 8,
+   "gloss": "woman",
+   "signer_id": "42"
+  },
+  {
+   "key": "62160:8",
+   "video_id": "62160",
+   "frame": 8,
+   "gloss": "walk",
+   "signer_id": "39"
+  },
+  {
+   "key": "63226:8",
+   "video_id": "63226",
+   "frame": 8,
+   "gloss": "who",
+   "signer_id": "36"
+  },
+  {
+   "key": "62247:8",
+   "video_id": "62247",
+   "frame": 8,
+   "gloss": "want",
+   "signer_id": "4"
+  },
+  {
+   "key": "23767:8",
+   "video_id": "23767",
+   "frame": 8,
+   "gloss": "full",
+   "signer_id": "38"
+  },
+  {
+   "key": "06360:8",
+   "video_id": "06360",
+   "frame": 8,
+   "gloss": "birthday",
+   "signer_id": "59"
+  },
+  {
+   "key": "68093:8",
+   "video_id": "68093",
+   "frame": 8,
+   "gloss": "like",
+   "signer_id": "109"
+  },
+  {
+   "key": "70361:8",
+   "video_id": "70361",
+   "frame": 8,
+   "gloss": "finish",
+   "signer_id": "121"
+  },
+  {
+   "key": "21944:8",
+   "video_id": "21944",
+   "frame": 8,
+   "gloss": "finish",
+   "signer_id": "45"
+  },
+  {
+   "key": "01386:8",
+   "video_id": "01386",
+   "frame": 8,
+   "gloss": "africa",
+   "signer_id": "6"
+  },
+  {
+   "key": "32950:8",
+   "video_id": "32950",
+   "frame": 8,
+   "gloss": "letter",
+   "signer_id": "15"
+  },
+  {
+   "key": "06481:8",
+   "video_id": "06481",
+   "frame": 8,
+   "gloss": "black",
+   "signer_id": "47"
+  },
+  {
+   "key": "50041:8",
+   "video_id": "50041",
+   "frame": 8,
+   "gloss": "secretary",
+   "signer_id": "13"
+  },
+  {
+   "key": "01394:8",
+   "video_id": "01394",
+   "frame": 8,
+   "gloss": "africa",
+   "signer_id": "5"
+  },
+  {
+   "key": "32246:8",
+   "video_id": "32246",
+   "frame": 8,
+   "gloss": "last",
+   "signer_id": "2"
+  },
+  {
+   "key": "37879:8",
+   "video_id": "37879",
+   "frame": 8,
+   "gloss": "need",
+   "signer_id": "9"
+  },
+  {
+   "key": "42960:8",
+   "video_id": "42960",
+   "frame": 8,
+   "gloss": "pizza",
+   "signer_id": "32"
+  },
+  {
+   "key": "69257:8",
+   "video_id": "69257",
+   "frame": 8,
+   "gloss": "can",
+   "signer_id": "118"
+  },
+  {
+   "key": "22117:8",
+   "video_id": "22117",
+   "frame": 8,
+   "gloss": "fish",
+   "signer_id": "21"
+  },
+  {
+   "key": "38991:8",
+   "video_id": "38991",
+   "frame": 8,
+   "gloss": "now",
+   "signer_id": "56"
+  },
+  {
+   "key": "69370:8",
+   "video_id": "69370",
+   "frame": 8,
+   "gloss": "how",
+   "signer_id": "115"
+  },
+  {
+   "key": "64209:8",
+   "video_id": "64209",
+   "frame": 8,
+   "gloss": "year",
+   "signer_id": "42"
+  },
+  {
+   "key": "62967:8",
+   "video_id": "62967",
+   "frame": 8,
+   "gloss": "what",
+   "signer_id": "39"
+  },
+  {
+   "key": "38525:8",
+   "video_id": "38525",
+   "frame": 8,
+   "gloss": "no",
+   "signer_id": "36"
+  },
+  {
+   "key": "08425:8",
+   "video_id": "08425",
+   "frame": 8,
+   "gloss": "but",
+   "signer_id": "4"
+  },
+  {
+   "key": "05727:8",
+   "video_id": "05727",
+   "frame": 8,
+   "gloss": "before",
+   "signer_id": "38"
+  },
+  {
+   "key": "13635:8",
+   "video_id": "13635",
+   "frame": 8,
+   "gloss": "cousin",
+   "signer_id": "59"
+  },
+  {
+   "key": "68145:8",
+   "video_id": "68145",
+   "frame": 8,
+   "gloss": "school",
+   "signer_id": "109"
+  },
+  {
+   "key": "70237:8",
+   "video_id": "70237",
+   "frame": 8,
+   "gloss": "need",
+   "signer_id": "121"
+  },
+  {
+   "key": "14883:8",
+   "video_id": "14883",
+   "frame": 8,
+   "gloss": "deaf",
+   "signer_id": "45"
+  },
+  {
+   "key": "00625:8",
+   "video_id": "00625",
+   "frame": 8,
+   "gloss": "accident",
+   "signer_id": "6"
+  },
+  {
+   "key": "14888:8",
+   "video_id": "14888",
+   "frame": 8,
+   "gloss": "deaf",
+   "signer_id": "15"
+  },
+  {
+   "key": "42840:8",
+   "video_id": "42840",
+   "frame": 8,
+   "gloss": "pink",
+   "signer_id": "47"
+  },
+  {
+   "key": "57278:8",
+   "video_id": "57278",
+   "frame": 8,
+   "gloss": "tell",
+   "signer_id": "13"
+  },
+  {
+   "key": "14682:8",
+   "video_id": "14682",
+   "frame": 8,
+   "gloss": "dark",
+   "signer_id": "5"
+  },
+  {
+   "key": "09950:8",
+   "video_id": "09950",
+   "frame": 8,
+   "gloss": "change",
+   "signer_id": "2"
+  },
+  {
+   "key": "07383:8",
+   "video_id": "07383",
+   "frame": 8,
+   "gloss": "bowling",
+   "signer_id": "9"
+  },
+  {
+   "key": "69440:8",
+   "video_id": "69440",
+   "frame": 8,
+   "gloss": "purple",
+   "signer_id": "118"
+  },
+  {
+   "key": "69439:8",
+   "video_id": "69439",
+   "frame": 8,
+   "gloss": "pull",
+   "signer_id": "115"
+  },
+  {
+   "key": "63201:8",
+   "video_id": "63201",
+   "frame": 8,
+   "gloss": "white",
+   "signer_id": "36"
+  },
+  {
+   "key": "22954:8",
+   "video_id": "22954",
+   "frame": 8,
+   "gloss": "forget",
+   "signer_id": "4"
+  },
+  {
+   "key": "31749:8",
+   "video_id": "31749",
+   "frame": 8,
+   "gloss": "kiss",
+   "signer_id": "38"
+  },
+  {
+   "key": "06335:8",
+   "video_id": "06335",
+   "frame": 8,
+   "gloss": "bird",
+   "signer_id": "59"
+  },
+  {
+   "key": "70234:8",
+   "video_id": "70234",
+   "frame": 8,
+   "gloss": "fine",
+   "signer_id": "121"
+  },
+  {
+   "key": "56843:8",
+   "video_id": "56843",
+   "frame": 8,
+   "gloss": "tall",
+   "signer_id": "13"
+  },
+  {
+   "key": "34834:8",
+   "video_id": "34834",
+   "frame": 8,
+   "gloss": "many",
+   "signer_id": "5"
+  },
+  {
+   "key": "63789:8",
+   "video_id": "63789",
+   "frame": 8,
+   "gloss": "work",
+   "signer_id": "2"
+  },
+  {
+   "key": "21933:8",
+   "video_id": "21933",
+   "frame": 8,
+   "gloss": "finish",
+   "signer_id": "9"
+  },
+  {
+   "key": "69389:8",
+   "video_id": "69389",
+   "frame": 8,
+   "gloss": "like",
+   "signer_id": "118"
+  },
+  {
+   "key": "64210:8",
+   "video_id": "64210",
+   "frame": 8,
+   "gloss": "year",
+   "signer_id": "36"
+  },
+  {
+   "key": "14673:8",
+   "video_id": "14673",
+   "frame": 8,
+   "gloss": "dark",
+   "signer_id": "4"
+  },
+  {
+   "key": "12320:8",
+   "video_id": "12320",
+   "frame": 8,
+   "gloss": "computer",
+   "signer_id": "59"
+  },
+  {
+   "key": "70029:8",
+   "video_id": "70029",
+   "frame": 8,
+   "gloss": "full",
+   "signer_id": "121"
+  },
+  {
+   "key": "43171:8",
+   "video_id": "43171",
+   "frame": 8,
+   "gloss": "play",
+   "signer_id": "13"
+  },
+  {
+   "key": "34743:8",
+   "video_id": "34743",
+   "frame": 8,
+   "gloss": "man",
+   "signer_id": "5"
+  },
+  {
+   "key": "27194:8",
+   "video_id": "27194",
+   "frame": 8,
+   "gloss": "help",
+   "signer_id": "9"
+  },
+  {
+   "key": "69433:8",
+   "video_id": "69433",
+   "frame": 8,
+   "gloss": "play",
+   "signer_id": "118"
+  },
+  {
+   "key": "13196:8",
+   "video_id": "13196",
+   "frame": 8,
+   "gloss": "cool",
+   "signer_id": "4"
+  },
+  {
+   "key": "11311:8",
+   "video_id": "11311",
+   "frame": 8,
+   "gloss": "clothes",
+   "signer_id": "59"
+  },
+  {
+   "key": "70119:8",
+   "video_id": "70119",
+   "frame": 8,
+   "gloss": "decide",
+   "signer_id": "121"
+  },
+  {
+   "key": "28121:8",
+   "video_id": "28121",
+   "frame": 8,
+   "gloss": "hot",
+   "signer_id": "5"
+  },
+  {
+   "key": "19255:8",
+   "video_id": "19255",
+   "frame": 8,
+   "gloss": "enjoy",
+   "signer_id": "9"
+  },
+  {
+   "key": "13198:8",
+   "video_id": "13198",
+   "frame": 8,
+   "gloss": "cool",
+   "signer_id": "4"
+  },
+  {
+   "key": "70030:8",
+   "video_id": "70030",
+   "frame": 8,
+   "gloss": "cook",
+   "signer_id": "121"
+  },
+  {
+   "key": "22126:8",
+   "video_id": "22126",
+   "frame": 8,
+   "gloss": "fish",
+   "signer_id": "5"
+  },
+  {
+   "key": "40816:8",
+   "video_id": "40816",
+   "frame": 8,
+   "gloss": "paint",
+   "signer_id": "9"
+  },
+  {
+   "key": "32157:8",
+   "video_id": "32157",
+   "frame": 8,
+   "gloss": "language",
+   "signer_id": "4"
+  },
+  {
+   "key": "70271:8",
+   "video_id": "70271",
+   "frame": 8,
+   "gloss": "cool",
+   "signer_id": "121"
+  },
+  {
+   "key": "36940:8",
+   "video_id": "36940",
+   "frame": 8,
+   "gloss": "mother",
+   "signer_id": "5"
+  },
+  {
+   "key": "41008:8",
+   "video_id": "41008",
+   "frame": 8,
+   "gloss": "paper",
+   "signer_id": "9"
+  },
+  {
+   "key": "70325:8",
+   "video_id": "70325",
+   "frame": 8,
+   "gloss": "letter",
+   "signer_id": "121"
+  },
+  {
+   "key": "06483:8",
+   "video_id": "06483",
+   "frame": 8,
+   "gloss": "black",
+   "signer_id": "5"
+  },
+  {
+   "key": "12306:8",
+   "video_id": "12306",
+   "frame": 8,
+   "gloss": "computer",
+   "signer_id": "9"
+  },
+  {
+   "key": "70026:8",
+   "video_id": "70026",
+   "frame": 8,
+   "gloss": "thursday",
+   "signer_id": "121"
+  },
+  {
+   "key": "50050:8",
+   "video_id": "50050",
+   "frame": 8,
+   "gloss": "secretary",
+   "signer_id": "5"
+  },
+  {
+   "key": "64201:8",
+   "video_id": "64201",
+   "frame": 8,
+   "gloss": "year",
+   "signer_id": "9"
+  },
+  {
+   "key": "05639:8",
+   "video_id": "05639",
+   "frame": 8,
+   "gloss": "bed",
+   "signer_id": "5"
+  },
+  {
+   "key": "64275:8",
+   "video_id": "64275",
+   "frame": 8,
+   "gloss": "yes",
+   "signer_id": "9"
+  },
+  {
+   "key": "56567:8",
+   "video_id": "56567",
+   "frame": 8,
+   "gloss": "table",
+   "signer_id": "5"
+  }
+ ]
+}

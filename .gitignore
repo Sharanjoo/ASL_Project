@@ -1,0 +1,26 @@
+# Downloaded or generated data — README.md says how to rebuild each
+WLASL/
+raw_videos/
+coco_images/
+coco_wholebody_ann/
+subset_*/
+runs/
+report/figures/
+
+# Domain-gap label set holds WLASL frames (C-UDA license: keep out of the repo);
+# the team's exported labels and the frame list are small and worth keeping
+domain_gap/*
+!domain_gap/label_set.json
+!domain_gap/domain_gap_labels_*.json
+data/sample_out/degradations.png
+
+*.zip
+*.npy
+*.npz
+*.pt
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
