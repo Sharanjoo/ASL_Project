@@ -340,6 +340,10 @@ bash models/run_pipeline.sh <keypoint checkpoint> runs/pipeline
 This extracts keypoints for clean frames and all 9 degraded conditions, trains both
 refiners and the three classifiers (Frame-only, +Temporal, +Temporal & robust
 training), then fills the proposal's robustness table: `robustness.md` and
-`robustness.csv` in the output folder, test split. With the CPU smoke-test
+`robustness.csv` in the output folder, test split. The table also has a
+literature baseline, +Interpolation: the Frame-only classifier on keypoints whose
+low-confidence frames (score < 0.2) are linearly interpolated over time from the
+trusted ones (`models/refinement/interpolate.py`, after Roh et al., 2024). It
+has no trained parameters. With the CPU smoke-test
 checkpoint it only checks the wiring; meaningful numbers need the GPU-trained
 extractor.

@@ -49,6 +49,7 @@ done
 # 4. Robustness table on the test split.
 $PY models/evaluate_robustness.py --keypoint_root "$KP" --out "$ROOT/robustness.csv" \
     --config "Frame-only=$ROOT/classifier_frame_only/best.pt" \
+    --config "+Interpolation=$ROOT/classifier_frame_only/best.pt:interpolate" \
     --config "+Temporal=$ROOT/classifier_refined_synthetic/best.pt:$ROOT/refiner_synthetic/best.pt" \
     --config "+Temporal & robust training=$ROOT/classifier_refined_degraded/best.pt:$ROOT/refiner_degraded/best.pt"
 

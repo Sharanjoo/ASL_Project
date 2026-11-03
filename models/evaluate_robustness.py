@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(HERE, "recognition"))
 sys.path.insert(0, os.path.join(HERE, "refinement"))
 
 from classifier import SignClassifier  # noqa: E402
+from interpolate import interpolate_low_confidence  # noqa: E402
 from keypoint_sequences import FEATURES_PER_FRAME, KeypointSequenceDataset, read_keypoint_manifest  # noqa: E402
 from metrics import classification_metrics, predict_logits  # noqa: E402
 from refiner import TemporalRefiner  # noqa: E402
@@ -32,7 +33,8 @@ def parse_args():
     )
     parser.add_argument(
         "--config", action="append", required=True,
-        help='"Name=classifier.pt" or "Name=classifier.pt:refiner.pt"; repeat once per column',
+        help='"Name=classifier.pt", "Name=classifier.pt:refiner.pt", or "Name=classifier.pt:interpolate" '
+             "for the interpolation baseline; repeat once per column",
     )
     parser.add_argument("--split", default="test")
     parser.add_argument("--out", required=True, help="Output CSV path; a .md table is written next to it")
@@ -56,6 +58,8 @@ def load_refiner(path, device):
 
 
 def refine_rows(rows, refiner, device):
+    if refiner == "interpolate":
+        return {row["keypoints_path"]: interpolate_low_confidence(np.load(row["keypoints_path"])) for row in rows}
     refined = {}
     with torch.no_grad():
         for row in rows:
@@ -80,7 +84,10 @@ def main():
         name, paths = spec.split("=", 1)
         classifier_path, _, refiner_path = paths.partition(":")
         classifier, num_classes = load_classifier(classifier_path, device)
-        refiner = load_refiner(refiner_path, device) if refiner_path else None
+        if refiner_path == "interpolate":
+            refiner = "interpolate"
+        else:
+            refiner = load_refiner(refiner_path, device) if refiner_path else None
         configs.append((name, classifier, num_classes, refiner))
 
     conditions = discover_conditions(args.keypoint_root)

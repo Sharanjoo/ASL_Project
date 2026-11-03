@@ -1,0 +1,74 @@
+ASL PROJECT - SECOND NPU RUN: KEYPOINTS FOR ALL 1,020 WLASL CLIPS
+=================================================================
+
+Same machine and tools as last time. This time the keypoint model runs over all 1,020 clips, not just
+the 161 test clips, so Sharan can retrain the later stages on the NPU's own output.
+
+Use plan B (backbone on the NPU, head on the CPU). No new compile is needed: reuse the SAME
+model_backbone.mxq from the last run.
+
+Time: about 30-45 minutes, mostly waiting.
+Disk: about 3 GB for this folder, plus about 150 MB for the results.
+Send back: one zip, about 100-150 MB (step 4).
+
+
+STEP 1 - UNZIP AND COPY THE COMPILED MODEL
+------------------------------------------
+Unzip asl_npu_retrain_bundle.zip into C:\NPU_Projects\ so that you have:
+    C:\NPU_Projects\asl_npu_retrain_bundle\run_npu.py
+
+Then copy the compiled model from the last run into the new folder:
+
+    copy C:\NPU_Projects\asl_npu_bundle\model_backbone.mxq C:\NPU_Projects\asl_npu_retrain_bundle\
+
+If that file no longer exists, see "IF THE .MXQ IS GONE" at the bottom.
+
+
+STEP 2 - QUICK CHECK
+--------------------
+Use the same Python 3.12 as last time (the one with maccel). It is written below as python312;
+replace that with its full path.
+
+    cd C:\NPU_Projects\asl_npu_retrain_bundle
+    python312 run_npu.py check --mxq model_backbone.mxq --head_onnx model_head.onnx
+
+Expected, the same as last time:
+    [check] layout hwc: PCK@0.1 on 32 COCO people = 87.9%
+If the percentage is far from that, STOP and send the output.
+
+
+STEP 3 - RUN
+------------
+    python312 run_npu.py wlasl --mxq model_backbone.mxq --head_onnx model_head.onnx > run_retrain.log 2>&1
+
+This writes results_npu_split\wlasl\ with 10 sub-folders of 1,020 files each. The log gets one line per
+condition, about 3 minutes each. If it stops partway, run the same command again: finished clips are skipped.
+
+To confirm it finished, run this (PowerShell). Every line should say 1020:
+
+    Get-ChildItem results_npu_split\wlasl -Directory | ForEach-Object { "$($_.Name) $((Get-ChildItem $_.FullName).Count)" }
+
+
+STEP 4 - SEND THESE BACK (zip them together)
+--------------------------------------------
+  - results_npu_split\
+  - run_retrain.log
+
+
+IF THE .MXQ IS GONE
+-------------------
+Compile it again in Docker. It uses the same settings as last time:
+
+    docker run -it --name qb_asl2 -v C:/NPU_Projects:/NPU_Projects mobilint/qbcompiler:0.12-cpu-ubuntu22.04 /bin/bash
+    pip install /NPU_Projects/qubee-0.12.0.0+aries2-py3-none-any.whl
+    pip install numpy pillow
+    cd /NPU_Projects/asl_npu_retrain_bundle
+    python convert_to_mxq.py --onnx model_backbone.onnx --out model_backbone.mxq 2>&1 | tee compile_backbone.log
+
+Also send compile_backbone.log, and tell Sharan the model was recompiled.
+
+
+ONE QUESTION FROM LAST TIME
+---------------------------
+Did you build model.mxq and model_backbone.mxq with the script's default settings, or did you change any
+options (for example --percentile)? Please tell Sharan either way.

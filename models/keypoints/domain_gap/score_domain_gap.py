@@ -19,7 +19,9 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Score a Stage 1 checkpoint against hand-labeled WLASL frames (the proposal's domain-gap check)."
     )
-    parser.add_argument("--checkpoint", required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--checkpoint")
+    source.add_argument("--predictions", help="(frames, 73, 3) keypoints already predicted elsewhere, e.g. on the NPU")
     parser.add_argument("--label_set", required=True, help="label_set.npz from make_label_set.py")
     parser.add_argument("--labels", nargs="+", required=True, help="One or more exported labels JSON files")
     parser.add_argument("--out", help="Optional JSON path for the metrics")
@@ -45,11 +47,15 @@ def main():
     frames, keys = label_set["frames"], [str(k) for k in label_set["keys"]]
     labels, labelers = merge_labels(args.labels)
 
-    model, train_args = load_model(args.checkpoint, device)
-    preds = []
-    for i in range(0, len(frames), 32):
-        preds.append(predict_clip(model, frames[i : i + 32], train_args["input_h"], train_args["input_w"], device))
-    preds = np.concatenate(preds)
+    if args.predictions:
+        preds = np.load(args.predictions)
+        assert len(preds) == len(frames), f"{args.predictions} has {len(preds)} frames, the label set {len(frames)}"
+    else:
+        model, train_args = load_model(args.checkpoint, device)
+        preds = []
+        for i in range(0, len(frames), 32):
+            preds.append(predict_clip(model, frames[i : i + 32], train_args["input_h"], train_args["input_w"], device))
+        preds = np.concatenate(preds)
 
     # errors[group] -> list of (pixel error / shoulder width), one per labeled point x model index
     errors = {group: [] for group in GROUPS}
@@ -78,7 +84,7 @@ def main():
                 errors[group].append(error / shoulder_width)
 
     results = {
-        "checkpoint": args.checkpoint,
+        "checkpoint": args.checkpoint or args.predictions,
         "labelers": labelers,
         "frames_in_set": len(keys),
         "frames_scored": scored_frames,
