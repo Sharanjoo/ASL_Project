@@ -460,6 +460,15 @@ with tab2:
                             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                             st.image(rgb_frame, caption=f"Frame {frame_idx + 1}/{total_frames}",
                                      width=500)
+                            frame_buffer = io.BytesIO()
+                            Image.fromarray(rgb_frame).save(frame_buffer, format="PNG")
+
+                            st.download_button(
+                                "Download original frame (.png)",
+                                data=frame_buffer.getvalue(),
+                                file_name=f"frame_{frame_idx + 1}_original.png",
+                                mime="image/png",
+                            )
                             if st.button("Detect Stage 1 keypoints in this frame",
                                          disabled=not CHECKPOINT.is_file()):
                                 try:
