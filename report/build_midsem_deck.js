@@ -1,4 +1,4 @@
-// Builds report/midsem_deck.pptx from runs/seeds/robustness_mean_std_top1.csv (refresh with models/aggregate_seeds.py first).
+// Builds report/midsem_deck.pptx from report/results/robustness_mean_std_top1.csv (see report/results/README.md to regenerate it).
 // 7-minute talk: 9 main slides (~45 s each) following the course rubric, then backup slides.
 //   node report/build_midsem_deck.js     (NODE_PATH must contain pptxgenjs and jszip: runs/tools/node_modules)
 const fs = require("fs");
@@ -11,7 +11,7 @@ const ROOT = path.resolve(__dirname, "..");
 const OUT = path.join(__dirname, "midsem_deck.pptx");
 
 // ---------- data ----------
-const csv = fs.readFileSync(path.join(ROOT, "runs/seeds/robustness_mean_std_top1.csv"), "utf8").trim().split(/\r?\n/).slice(1);
+const csv = fs.readFileSync(path.join(ROOT, "report/results/robustness_mean_std_top1.csv"), "utf8").trim().split(/\r?\n/).slice(1);
 const D = {};
 for (const line of csv) {
   const [cond, cfg, mean, std, n] = line.split(",");
@@ -370,7 +370,7 @@ function backupLimits() {
 function backupConfusion() {
   const s = pres.addSlide({ masterName: "LIGHT", ...SEC });
   s.addText("Backup: where errors land", { placeholder: "title" });
-  s.addImage({ path: path.join(ROOT, "report/figures/confusion_matrix_proposed.png"), x: 0.5, y: 1.25, w: 4.4, h: 3.85, altText: "Confusion matrix of the Proposed model on the clean test split: a clear diagonal with scattered single-clip errors" });
+  s.addImage({ path: path.join(ROOT, "report/results/confusion_matrix_proposed.png"), x: 0.5, y: 1.25, w: 4.4, h: 3.85, altText: "Confusion matrix of the Proposed model on the clean test split: a clear diagonal with scattered single-clip errors" });
   [["50.0%", "top-1 on 258 clean test clips"], ["17 / 19", "words always right / never right (2+ test clips)"], ["Spread out", "no single class dominates the errors"]].forEach(([big, small], i) => {
     const y = 1.3 + i * 1.0;
     card(s, 5.2, y, 4.3, 0.88, C.background2, `Err ${i + 1}`);
