@@ -1,0 +1,47 @@
+{
+  "checkpoint": "runs/baselines/mediapipe/label_preds_asis.npy",
+  "labelers": [
+    "Sharan"
+  ],
+  "frames_in_set": 100,
+  "frames_scored": 90,
+  "frames_unlabeled": 2,
+  "frames_skipped_no_shoulders": 8,
+  "groups": {
+    "upper_body": {
+      "points": 449,
+      "mean_error": 0.08933386951684952,
+      "pck@0.1": 0.5545657015590201,
+      "pck@0.2": 0.9866369710467706,
+      "pck@0.5": 1.0
+    },
+    "mouth": {
+      "points": 355,
+      "mean_error": 0.08511444181203842,
+      "pck@0.1": 0.5098591549295775,
+      "pck@0.2": 0.9887323943661972,
+      "pck@0.5": 1.0
+    },
+    "left_hand": {
+      "points": 259,
+      "mean_error": 0.17797498404979706,
+      "pck@0.1": 0.7837837837837838,
+      "pck@0.2": 0.9073359073359073,
+      "pck@0.5": 0.9382239382239382
+    },
+    "right_hand": {
+      "points": 464,
+      "mean_error": 0.16567078232765198,
+      "pck@0.1": 0.8103448275862069,
+      "pck@0.2": 0.9202586206896551,
+      "pck@0.5": 0.9331896551724138
+    },
+    "all": {
+      "points": 1527,
+      "mean_error": 0.12658369541168213,
+      "pck@0.1": 0.6607727570399476,
+      "pck@0.2": 0.9535036018336608,
+      "pck@0.5": 0.9692206941715783
+    }
+  }
+}

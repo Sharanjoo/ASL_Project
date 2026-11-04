@@ -13,6 +13,8 @@ All numbers are top-1 / top-5 / macro-F1 on the 258 WLASL100 test clips, 10 cond
 | `stage1_domain_gap_metrics.json` | Stage 1 on the 100 hand-labeled WLASL frames. |
 | `confusion_matrix_*.png` | Clean-condition confusion matrices on the test split. |
 
+`baselines/` holds the MediaPipe and RTMW results (see `../baseline_comparison.md`): per-seed tables in `baselines/seeds/`, the combined mean ± std tables in `baselines/robustness_mean_std_all_*`, and keypoint-accuracy metrics (`*_domain_gap_metrics.json` on the 100 hand-labeled WLASL frames, `*_coco_val_metrics.json` on COCO-WholeBody val).
+
 Regenerate the mean ± std tables (run from the repo root):
 
 ```bash

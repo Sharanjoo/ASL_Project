@@ -1,0 +1,47 @@
+{
+  "checkpoint": "runs/baselines/rtmw/label_preds.npy",
+  "labelers": [
+    "Sharan"
+  ],
+  "frames_in_set": 100,
+  "frames_scored": 90,
+  "frames_unlabeled": 2,
+  "frames_skipped_no_shoulders": 8,
+  "groups": {
+    "upper_body": {
+      "points": 449,
+      "mean_error": 0.0707603394985199,
+      "pck@0.1": 0.7037861915367484,
+      "pck@0.2": 0.9933184855233853,
+      "pck@0.5": 1.0
+    },
+    "mouth": {
+      "points": 355,
+      "mean_error": 0.08791134506464005,
+      "pck@0.1": 0.504225352112676,
+      "pck@0.2": 0.9774647887323944,
+      "pck@0.5": 1.0
+    },
+    "left_hand": {
+      "points": 259,
+      "mean_error": 0.045268312096595764,
+      "pck@0.1": 0.9691119691119691,
+      "pck@0.2": 0.9961389961389961,
+      "pck@0.5": 1.0
+    },
+    "right_hand": {
+      "points": 464,
+      "mean_error": 0.04685493931174278,
+      "pck@0.1": 0.9353448275862069,
+      "pck@0.2": 0.9935344827586207,
+      "pck@0.5": 1.0
+    },
+    "all": {
+      "points": 1527,
+      "mean_error": 0.06315986812114716,
+      "pck@0.1": 0.7727570399476097,
+      "pck@0.2": 0.9901768172888016,
+      "pck@0.5": 1.0
+    }
+  }
+}
