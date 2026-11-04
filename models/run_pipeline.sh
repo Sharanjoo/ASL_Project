@@ -53,4 +53,12 @@ $PY models/evaluate_robustness.py --keypoint_root "$KP" --out "$ROOT/robustness.
     --config "+Temporal=$ROOT/classifier_refined_synthetic/best.pt:$ROOT/refiner_synthetic/best.pt" \
     --config "+Temporal & robust training=$ROOT/classifier_refined_degraded/best.pt:$ROOT/refiner_degraded/best.pt"
 
+# 5. Optional raw-frame CNN baseline (RAW_FRAME=1): ResNet-18 + GRU on pixels, same 10 conditions, merged in as a column.
+if [ -n "${RAW_FRAME:-}" ]; then
+    $PY models/raw_frame/train_raw_frames.py --manifest "$FRAMES" --out_dir "$ROOT/classifier_raw_frame" \
+        --epochs "${RAW_FRAME_EPOCHS:-30}"
+    $PY models/raw_frame/evaluate_raw_frames.py --checkpoint "$ROOT/classifier_raw_frame/best.pt" --manifest "$FRAMES" \
+        --hand_keypoints_dir "$KP/clean" --out "$ROOT/robustness_raw_frame.csv" --merge_into "$ROOT/robustness.csv"
+fi
+
 cat "$ROOT/robustness.md"

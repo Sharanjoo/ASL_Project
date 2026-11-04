@@ -331,6 +331,27 @@ the 100 glosses (bidirectional GRU by default, `--arch transformer` available). 
 reports top-1, top-5 and macro F1 on val/test, keeping the checkpoint with the best
 val top-1.
 
+## Raw-frame CNN baseline
+
+`models/raw_frame/` is the appearance-based reference from the proposal: an ImageNet-pretrained
+ResNet-18 on every frame, then the same bidirectional GRU head as Stage 3 (essentially
+VGG-GRU, trained on our clips). It answers whether pixels degrade more or less than keypoints
+under the same damage.
+
+```
+python models/raw_frame/train_raw_frames.py --manifest subset_100/frames16/manifest_frames.csv \
+    --out_dir runs/pipeline/classifier_raw_frame
+python models/raw_frame/evaluate_raw_frames.py --checkpoint runs/pipeline/classifier_raw_frame/best.pt \
+    --manifest subset_100/frames16/manifest_frames.csv --hand_keypoints_dir runs/pipeline/keypoints/clean \
+    --out runs/pipeline/robustness_raw_frame.csv --merge_into runs/pipeline/robustness.csv
+```
+
+It trains on clean frames only, like the keypoint classifiers. The evaluation degrades the frames on the
+fly with the same seeded damage as `predict_wlasl.py` (and `--hand_keypoints_dir` puts the occluder
+on the same wrists), then adds a "Raw-frame CNN" column to `robustness.csv`/`.md`. `RAW_FRAME=1 bash
+models/run_pipeline.sh ...` does all of it. `--freeze_backbone` trains only the GRU on frozen features;
+use it if the fine-tuned run overfits the 680 training clips.
+
 ## Running everything after Stage 1
 
 ```
