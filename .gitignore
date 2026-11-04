@@ -24,3 +24,6 @@ data/sample_out/degradations.png
 __pycache__/
 *.pyc
 .venv/
+
+# Extra virtual environments (baseline extractors)
+.venv_*/
