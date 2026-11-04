@@ -53,25 +53,60 @@ All 10 conditions, plus top-5 and macro-F1: `report/results/baselines/robustness
 
 ## 3. What the numbers say
 
-1. **RTMW is the strongest extractor.** With the same plain Stage 3, RTMW beats our Stage 1 on clean clips (53.8 vs 49.5) and on the degraded average (43.9 vs 36.6). The clean gap is about two standard deviations, so it is probably real, but we have not tested it formally.
+1. **RTMW is the strongest extractor.** With the same plain Stage 3, RTMW beats our Stage 1 on clean clips (53.8 vs 49.5) and on the degraded average (43.9 vs 36.6). The clean gap is about two standard deviations, and the paired bootstrap in section 4 agrees (+4.3, interval [+0.4, +8.4]).
 2. **Our Stage 1 plus the robust refiner roughly matches RTMW under damage.** Proposed averages 42.2 against RTMW's 43.9, a gap smaller than one standard deviation, so we cannot separate them. Proposed is ahead where damage is heaviest on frames (missing moderate 42.8 vs 41.4, missing severe 29.5 vs 23.7, severe blur 40.0 vs 37.4), and RTMW is ahead on clean clips and occlusion (the severe-occlusion gap is within noise). Note that this row compares a pipeline with a refiner to an extractor without one. The like-for-like extractor comparison is the Frame-only column against MediaPipe and RTMW.
 3. **The refiner does real work.** It adds about 5.6 points on average to our Stage 1 and halves its drop under degradation. We did not apply the refiner to RTMW keypoints, so we do not know whether it would help a stronger extractor too. That is the obvious next experiment.
 4. **MediaPipe is the weakest extractor here.** Its average (23.6) is below the raw-frame CNN (29.9), and it collapses under severe blur (8.4). Interpolation helps it under blur (19.8 at severe) but costs it on clean clips (37.0 to 27.1).
 5. **Interpolation does not help RTMW** and hurts under missing frames (missing moderate 41.4 to 31.2). We did not investigate why.
 6. **Keypoint accuracy and sign accuracy agree in order** (RTMW > Stage 1 > MediaPipe), but not in proportion. RTMW's 1.3-point PCK@0.1 lead over Stage 1 on COCO val comes with a 4.3-point top-1 lead, while MediaPipe's 49-point deficit on COCO val costs only 12.5 points of top-1 on clean clips. COCO val tests small, hard-to-see hands, which is a harder setting than the signer-centred WLASL frames.
 
-## 4. Caveats
+## 4. Follow-up checks (done after the first comparison)
+
+**Confidence intervals** (`report/results/baselines/bootstrap_ci.md`; 10,000 resamples of the 258 test clips, paired between models, each clip scored as the share of 5 seeds that get it right):
+
+- The refiner's gain over Stage 1 Frame-only on the degraded average is +5.6 points, 95% interval [+3.9, +7.4]. It is +15.7 [+11.6, +19.8] on severe missing frames, and −0.6 [−2.8, +1.6] on clean clips (no gain, no loss).
+- RTMW over Frame-only on clean clips is +4.3 [+0.4, +8.4], real but borderline.
+- RTMW minus Proposed on the degraded average is +1.7 [−1.0, +4.4]: not distinguishable. On severe missing frames Proposed leads RTMW by 5.7 [1.6, 9.8]. On clean clips RTMW leads Proposed by 5.0 [+1.2, +8.7]. Severe blur and severe occlusion are not distinguishable.
+- These intervals cover clip-to-clip variation only. They do not cover Stage 1 training variation (see caveats).
+
+**MediaPipe confidence scores** (5 seeds, untuned Stage 3, `robustness_mean_std_with_variants_tuned_*`): the first comparison gave MediaPipe's hand and mouth points a score of 1.0. Two alternatives were tested, scores taken from pose-wrist/nose visibility, and all detected points set to a flat 1.0.
+
+| | Clean | Average, 9 degraded |
+|---|---|---|
+| MediaPipe (as in the first comparison) | 37.0 ± 3.1 | 23.6 ± 0.7 |
+| MediaPipe, visibility scores | 38.8 ± 2.1 | 24.2 ± 1.1 |
+| MediaPipe, flat scores | 37.8 ± 1.7 | 23.7 ± 0.5 |
+
+All three are within one standard deviation of each other, so the placeholder scores are not why MediaPipe trails. Hand detection is.
+
+**Stage 3 tuning, chosen on validation only.** Grid of hidden size {128, 256}, dropout {0.3, 0.5}, learning rate {1e-3, 3e-4}, two seeds per setting, best mean validation top-1 retrained with 5 seeds (`report/results/baselines/tuning/`). The selected setting was learning rate 3e-4 for all three extractors (hidden 256 for Stage 1 and RTMW, 128 for MediaPipe; dropout 0.3).
+
+| Top-1 % (mean ± std, 5 seeds) | Clean, untuned | Clean, tuned | Degraded avg, untuned | Degraded avg, tuned |
+|---|---|---|---|---|
+| Stage 1 Frame-only | 49.5 ± 1.3 | 59.6 ± 1.7 | 36.6 ± 1.3 | 44.1 ± 1.9 |
+| RTMW | 53.8 ± 2.1 | 62.2 ± 1.3 | 43.9 ± 1.8 | 49.2 ± 0.6 |
+| MediaPipe | 37.0 ± 3.1 | 51.6 ± 1.3 | 23.6 ± 0.7 | 32.0 ± 1.7 |
+
+What this changes:
+
+- **Tuning helps every extractor a lot, mostly through the lower learning rate**, and the order does not change: RTMW > Stage 1 > MediaPipe, on clean and degraded alike.
+- **The gaps shrank but remain.** RTMW's lead over Stage 1 on the degraded average is 5.1 points tuned (49.2 vs 44.1) against 7.3 untuned. On clean clips it is 2.6 tuned against 4.3 untuned. MediaPipe's gap to Stage 1 on clean clips shrank from 12.5 to 8.0. We did not recompute confidence intervals for the tuned models.
+- **The headline "Proposed roughly matches RTMW under damage" does not survive tuning as stated.** The tuned Frame-only classifier (44.1) already matches the untuned Proposed pipeline (42.2). The refiner pipeline was not tuned, so the fair comparison is tuned Frame-only against tuned RTMW (44.1 vs 49.2), and we have not run tuned Stage 3 on the refined keypoints. Until we do, the claim to make is that the refiner helps Stage 1 under the same untuned recipe, not that it matches a tuned RTMW.
+- **Tuned models lose more on severe missing frames.** Tuned Frame-only and RTMW score 14.7 and 18.1 there, below untuned Proposed (29.5). Tuning improved clean-clip fitting, not robustness to missing frames.
+- The best setting sits at the edge of the grid (lowest learning rate), so a wider search might improve all three further. The validation split has 338 clips, so differences of a point or two between settings are noise.
+
+## 5. Caveats
 
 - **MediaPipe is a fair but imperfect baseline.** The mouth mapping used hand-chosen face-mesh points, its hand and face points have no real confidence score, and it ran per frame in image mode with no tracking. Its mouth accuracy on the labeled frames is at least on par with the others (PCK@0.2 98.9% against 97.7% for both Stage 1 and RTMW), so the mapping is probably not the main problem; hand detection is.
 - **RTMW stands in for OpenPose.** We did not run OpenPose itself.
 - **One trained Stage 1.** Seeds vary Stages 2-3 and the classifiers, not Stage 1. MediaPipe and RTMW are fixed models.
-- **No tuning.** Every extractor uses the same, untuned Stage 3 recipe.
-- **Small test set.** 258 clips. Differences within about one standard deviation are not claimed. We have not yet computed confidence intervals over clips.
+- **Tuning only partly applied.** The main tables use one untuned Stage 3 recipe for every extractor. Tuned results (section 4) exist for Frame-only, RTMW and MediaPipe, not for the refiner pipeline, so Proposed is not compared against tuned RTMW.
+- **Small test set.** 258 clips. Differences within about one standard deviation are not claimed. Clip-level intervals are in section 4 for the untuned models.
 - Results are on one dataset (WLASL100) whose official splits are not signer-disjoint.
 
-## 5. Planned improvements
+## 6. Still to do
 
-In this order: paired bootstrap confidence intervals over test clips; MediaPipe confidence-score variants; per-extractor Stage 3 tuning chosen on the validation split; additional Stage 1 training seeds. This document will be updated when they are done.
+Done: paired bootstrap intervals, MediaPipe score variants, per-extractor Stage 3 tuning. Remaining: two extra Stage 1 training seeds (to measure Stage 1's own run-to-run spread); tuned Stage 3 on the refined keypoints so the refiner pipeline can be compared with tuned RTMW; a wider learning-rate search. This document will be updated when they are done.
 
 ## Reproduce
 
