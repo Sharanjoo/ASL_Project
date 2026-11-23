@@ -4,7 +4,9 @@ Run from the repository root:
     python -m pip install streamlit matplotlib numpy pillow opencv-python streamlit-image-coordinates streamlit-webrtc av imageio-ffmpeg
     python -m streamlit run keypoint_explorer.py
 
-This app can run the trained 73-point Stage 1 detector if its checkpoint is available.
+This app can run the trained 73-point Stage 1 detector if its checkpoint is available,
+and the full Stage 1 -> Stage 2 -> Stage 3 word recognizer (Word Recognition tab) when
+runs/pipeline/ holds the team's refiner and classifier checkpoints.
 """
 from __future__ import annotations
 
@@ -420,7 +422,7 @@ def clear_private_media():
     for key in (
         "webcam_recorder", "webcam_last_clip", "webcam_annotated",
         "full_video_stage1_result", "full_video_annotated",
-        "stage1_image_result", "stage1_video_result",
+        "stage1_image_result", "stage1_video_result", "word_recognition_result",
     ):
         st.session_state.pop(key, None)
     # A new key resets file uploaders on the next rerun.
@@ -566,8 +568,9 @@ def draw_live_overlay(frame_bgr: np.ndarray, predicted73: np.ndarray,
     return result
 
 
-tab1, tab2, tab3, tab4 = st.tabs([
-    "Keypoint Selector", "Image & Video", "Model Predictions", "Live Camera"
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "Keypoint Selector", "Image & Video", "Model Predictions", "Live Camera",
+    "Word Recognition (Stages 1-3)",
 ])
 
 with tab1:
@@ -893,6 +896,12 @@ with tab3:
         except (ValueError, OSError) as exc:
             st.error(f"Could not load predictions: {exc}")
 
+with tab5:
+    from word_recognition_tab import render_word_recognition
+
+    render_word_recognition(load_stage1, CHECKPOINT.is_file(), shared_inference_lock(),
+                            st.session_state.private_media_generation)
+
 st.divider()
 st.caption("Stage 1 always processes full RGB frames and predicts its 73 supported landmarks. "
            "Selection can filter displays or prepare masked 73-landmark arrays for future "
@@ -1035,8 +1044,7 @@ with tab4:
                                            data=recorded_video[0],
                                            file_name="webcam_recording_annotated.mp4",
                                            mime="video/mp4", key="webcam_clip_download")
-                    st.info("Future Stage 2/3: feed the saved keypoint sequence to the trained "
-                            "temporal/refinement and Bi-GRU models for word recognition. "
-                            "No ASL classification is performed in this version.")
+                    st.info("To recognize the signed word, open the Word Recognition tab "
+                            "and choose Webcam recording.")
                 st.caption("Video overlay assumes predict_clip returns original-frame pixel "
                            "coordinates. Test tracking alignment before presenting the demo.")
