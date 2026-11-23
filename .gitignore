@@ -27,3 +27,4 @@ __pycache__/
 
 # Extra virtual environments (baseline extractors)
 .venv_*/
+.DS_Store
