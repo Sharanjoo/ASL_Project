@@ -316,7 +316,7 @@ def draw_keypoints(frame_rgb: np.ndarray, keypoints: np.ndarray, min_score: floa
     for g, s in GROUP_SLICES.items():
         for x, y, c in keypoints[s]:
             if c >= min_score:
-                cv2.circle(img, (int(round(x * scale)), int(round(y * scale))), 2 * scale // 2 + 1,
+                cv2.circle(img, (int(round(x * scale)), int(round(y * scale))), scale + 1,
                            colors[g], -1, cv2.LINE_AA)
     return img
 
@@ -394,13 +394,6 @@ class LiveWordPredictor:
     def configure(self, window_s: float) -> None:
         with self._lock:
             self.window_s = float(window_s)
-
-    def reset(self) -> None:
-        with self._lock:
-            self._buffer.clear()
-            self._ema = None
-            self._history.clear()
-            self._state = {"status": "collecting", "word": None, "prob": 0.0, "top3": [], "frames": 0}
 
     def state(self) -> dict:
         with self._lock:

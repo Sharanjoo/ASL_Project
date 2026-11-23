@@ -63,7 +63,7 @@ def main() -> int:
 
     results = []
     for row in rows:
-        path, _ = find_video(video_dir, row)
+        path = find_video(video_dir, row)
         if path is None:
             continue
         stored_path = manifest_dir / f"{row['video_id']}.npy"

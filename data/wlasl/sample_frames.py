@@ -179,20 +179,15 @@ def youtube_id(url: str) -> str | None:
     return m.group(1) if m else None
 
 
-def find_video(video_dir: Path, row: dict) -> tuple[Path | None, bool]:
-    """Locate a clip. Returns (path, is_per_instance_file)."""
-    vid = row["video_id"]
-    for ext in VIDEO_EXTS:
-        p = video_dir / f"{vid}{ext}"
-        if p.exists():
-            return p, True
-    yt = youtube_id(row.get("url", ""))
-    if yt:
+def find_video(video_dir: Path, row: dict) -> Path | None:
+    """Locate a clip: <video_id>.<ext> (per-instance file) or <youtube_id>.<ext> (raw download)."""
+    names = [row["video_id"], youtube_id(row.get("url", ""))]
+    for name in filter(None, names):
         for ext in VIDEO_EXTS:
-            p = video_dir / f"{yt}{ext}"
+            p = video_dir / f"{name}{ext}"
             if p.exists():
-                return p, False
-    return None, False
+                return p
+    return None
 
 
 def main(argv=None) -> int:
@@ -218,12 +213,11 @@ def main(argv=None) -> int:
 
     ok_rows, n_missing, n_bad = [], 0, 0
     for i, row in enumerate(rows, 1):
-        path, per_instance = find_video(video_dir, row)
+        path = find_video(video_dir, row)
         if path is None:
             n_missing += 1
             continue
-        # A per-instance file named by video_id may already be trimmed;
-        # sample_video falls back to the whole file in that case.
+        # A per-instance file may already be trimmed; sample_video then uses the whole file.
         clip = sample_video(
             path, args.num_frames, args.img_size, args.crop, row.get("bbox"),
             int(row.get("frame_start", 1) or 1), int(row.get("frame_end", -1) or -1),

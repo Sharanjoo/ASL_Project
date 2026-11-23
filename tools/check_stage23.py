@@ -35,25 +35,12 @@ ORIGINAL_COLUMN = {
 
 
 def read_original(path: Path) -> dict:
-    """{(condition, column): (top1, top5)} from robustness.csv (values in %)."""
-    out = {}
+    """{(condition, config): (top1 %, top5 %)} from evaluate_robustness.py's CSV."""
     if not path.is_file():
-        return out
+        return {}
     with open(path, newline="") as fh:
-        rows = list(csv.DictReader(fh))
-    for r in rows:
-        cond = r.get("condition") or r.get("Condition")
-        col = r.get("config") or r.get("model") or r.get("Config")
-        if cond is None or col is None:
-            continue
-        def pct(key):
-            v = r.get(key)
-            if v in (None, ""):
-                return None
-            v = float(v)
-            return v * 100 if v <= 1.0 else v
-        out[(cond, col)] = (pct("top1"), pct("top5"))
-    return out
+        return {(r["condition"], r["config"]): (100 * float(r["top1"]), 100 * float(r["top5"]))
+                for r in csv.DictReader(fh)}
 
 
 def main() -> int:
@@ -88,7 +75,7 @@ def main() -> int:
         for name in MODEL_CONFIGS:
             t1, t5 = (100 * h / len(clips) for h in hits[name])
             ref = original.get((cond, ORIGINAL_COLUMN[name]))
-            if ref and ref[0] is not None:
+            if ref:
                 worst = max(worst, abs(t1 - ref[0]))
                 cells.append(f"{t1:5.1f} ({t5:4.1f}) vs {ref[0]:5.1f}")
             else:

@@ -21,7 +21,7 @@ import pandas as pd
 import streamlit as st
 
 from models.asl_pipeline import (
-    CONDITIONS, MODEL_CONFIGS, NUM_FRAMES, PRIMARY_MODEL, Recognizer, correction_per_frame,
+    CONDITIONS, NUM_FRAMES, PRIMARY_MODEL, Recognizer, correction_per_frame,
     draw_keypoints, group_confidence, hand_motion, load_labels, load_stored_keypoints, missing_files,
     read_video_frames, recognize_frames, stored_clips,
 )
