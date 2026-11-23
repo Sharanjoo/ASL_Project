@@ -1,7 +1,7 @@
 """Interactive COCO-WholeBody keypoint selector for the DATA 255 ASL project.
 
 Run from the repository root:
-    python -m pip install streamlit matplotlib numpy pillow opencv-python streamlit-image-coordinates
+    python -m pip install streamlit matplotlib numpy pillow opencv-python streamlit-image-coordinates streamlit-webrtc av imageio-ffmpeg
     python -m streamlit run keypoint_explorer.py
 
 This app can run the trained 73-point Stage 1 detector if its checkpoint is available.
@@ -21,6 +21,11 @@ import cv2
 import tempfile
 import os
 import sys
+import threading
+import hashlib
+import time
+import subprocess
+import json
 
 from models.keypoints.keypoint_spec import WHOLEBODY_INDICES
 
@@ -60,10 +65,174 @@ def wholebody_points(kpts73: np.ndarray) -> np.ndarray:
     return all_points
 
 
+def selection_for_model(points: np.ndarray, selected_ids: set[int]) -> np.ndarray:
+    """Mask excluded landmarks without changing the 73-channel Stage 1 order.
+
+    This prepares downstream model data. It does NOT affect ResNet-50
+    inference or guarantee a downstream classifier accepts masked input.
+    """
+    data = np.asarray(points).copy()
+    if data.shape[-2:] != (len(WHOLEBODY_INDICES), 3):
+        raise ValueError("Expected 73 landmarks with (x, y, confidence) channels")
+    keep = np.isin(np.asarray(WHOLEBODY_INDICES), list(selected_ids))
+    data[..., ~keep, :] = 0.0
+    return data
+
+
+def model_ready_points(points: np.ndarray) -> np.ndarray:
+    """Keep output unchanged in visualization mode; mask for model-input mode."""
+    if st.session_state.get("selection_mode") == "Prepare model input (mask)":
+        return selection_for_model(points, set(st.session_state.selection))
+    return np.asarray(points)
+
+
+def array_npy_bytes(arr: np.ndarray) -> bytes:
+    buffer = io.BytesIO()
+    np.save(buffer, arr)
+    return buffer.getvalue()
+
+
 def npy_bytes(kpts73: np.ndarray) -> bytes:
     buf = io.BytesIO()
     np.save(buf, kpts73[None, ...])
     return buf.getvalue()
+
+
+@st.cache_resource
+
+def shared_inference_lock():
+    """Protect the cached Stage 1 model across Streamlit sessions/threads."""
+    return threading.Lock()
+
+
+class WebcamClipRecorder:
+    """Thread-safe bounded collection of *processed* webcam frames and predictions.
+
+    Captures frames already sent through Stage 1. Thus a slow detector means
+    fewer recorded frames, not a representation of every camera frame.
+    """
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.recording = False
+        self.frames = []
+        self.predictions = []
+        self.times = []
+        self.start_time = None
+        self.max_seconds = 12.0
+        self.max_frames = 180
+        self.interval = 0.10  # At most 10 sampled/processed frames per second.
+
+    def start(self, seconds):
+        with self.lock:
+            self.recording = True
+            self.frames = []
+            self.predictions = []
+            self.times = []
+            self.max_seconds = float(seconds)
+            self.max_frames = min(int(seconds * 10) + 1, 180)
+            self.start_time = time.monotonic()
+
+    def append(self, frame_bgr, predicted73):
+        now = time.monotonic()
+        with self.lock:
+            if not self.recording:
+                return
+            if (now - self.start_time >= self.max_seconds or
+                    len(self.frames) >= self.max_frames):
+                self.recording = False
+                return
+            if self.times and now - self.times[-1] < self.interval:
+                return
+            self.frames.append(frame_bgr.copy())
+            self.predictions.append(np.asarray(predicted73, dtype=np.float32).copy())
+            self.times.append(now)
+
+    def stop_and_snapshot(self):
+        with self.lock:
+            self.recording = False
+            if not self.predictions:
+                return None
+            snapshot = {
+                "frames": self.frames,
+                "sequence": np.stack(self.predictions).astype(np.float32),
+                "times": np.array(self.times, dtype=np.float64),
+            }
+            # Transfer ownership to the session result instead of retaining a second copy.
+            self.frames = []
+            self.predictions = []
+            self.times = []
+            self.start_time = None
+            return snapshot
+
+    def clear(self):
+        """Stop capturing and release references to captured video and keypoints."""
+        with self.lock:
+            self.recording = False
+            self.frames.clear()
+            self.predictions.clear()
+            self.times.clear()
+            self.start_time = None
+
+    def status(self):
+        with self.lock:
+            return self.recording, len(self.frames)
+
+
+def export_annotated_mp4(frames_bgr, sequence, selected_ids, confidence,
+                         show_ids=False, fps=10.0):
+    """Encode an MP4 with selected 73-point skeletons; use H.264 when available."""
+    if not frames_bgr or len(frames_bgr) != len(sequence):
+        raise ValueError("Video frames and landmark predictions do not match")
+    height, width = frames_bgr[0].shape[:2]
+    fps = max(1.0, min(float(fps), 60.0))
+    with tempfile.TemporaryDirectory(prefix="asl_export_") as tmp:
+        raw = str(Path(tmp) / "opencv.mp4")
+        writer = cv2.VideoWriter(raw, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+        if not writer.isOpened():
+            raise RuntimeError("OpenCV cannot create an MP4 with the available codecs")
+        try:
+            for frame, pts in zip(frames_bgr, sequence):
+                if frame.shape[:2] != (height, width):
+                    frame = cv2.resize(frame, (width, height))
+                writer.write(draw_live_overlay(frame, pts, set(selected_ids),
+                                               confidence, show_ids))
+        finally:
+            writer.release()
+        if not Path(raw).is_file() or Path(raw).stat().st_size == 0:
+            raise RuntimeError("Annotated MP4 export produced an empty file")
+        # Web browsers tend not to play OpenCV's MPEG-4 Part 2 codec.
+        # Convert to H.264 using an ffmpeg binary shipped with imageio-ffmpeg.
+        try:
+            import imageio_ffmpeg
+            ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+            converted = str(Path(tmp) / "annotated_h264.mp4")
+            subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-i", raw,
+                            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                            "-movflags", "+faststart", converted],
+                           check=True, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.PIPE, timeout=120)
+            return Path(converted).read_bytes(), True
+        except (ImportError, OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return Path(raw).read_bytes(), False
+
+
+def export_uploaded_annotated_mp4(path, sequence, selected_ids, confidence, fps):
+    cap = cv2.VideoCapture(str(path))
+    if not cap.isOpened():
+        raise ValueError("Cannot reopen uploaded video")
+    frames = []
+    try:
+        for _ in range(len(sequence)):
+            ok, frame = cap.read()
+            if not ok:
+                break
+            frames.append(frame)
+    finally:
+        cap.release()
+    if len(frames) != len(sequence):
+        raise ValueError("Video frame count changed since extraction; rerun Stage 1")
+    return export_annotated_mp4(frames, sequence, selected_ids, confidence,
+                                fps=fps if fps > 0 else 24.0)
 
 
 SUPPORTED = set(map(int, WHOLEBODY_INDICES))
@@ -237,6 +406,35 @@ def draw(points: np.ndarray, selected: set[int], show_ids: bool,
 
 st.set_page_config(page_title="ASL Keypoint Explorer", layout="wide")
 st.title("ASL Keypoint Explorer")
+
+# All media/results stay temporary. Reset the upload widget identities as well
+# as the stored results so the browser no longer displays the old uploads.
+if "private_media_generation" not in st.session_state:
+    st.session_state.private_media_generation = 0
+
+
+def clear_private_media():
+    recorder = st.session_state.get("webcam_recorder")
+    if recorder is not None:
+        recorder.clear()
+    for key in (
+        "webcam_recorder", "webcam_last_clip", "webcam_annotated",
+        "full_video_stage1_result", "full_video_annotated",
+        "stage1_image_result", "stage1_video_result",
+    ):
+        st.session_state.pop(key, None)
+    # A new key resets file uploaders on the next rerun.
+    st.session_state.private_media_generation += 1
+
+
+if st.button("Clear uploads, recordings and predictions", key="clear_private_data"):
+    clear_private_media()
+    st.rerun()
+
+st.caption("Media is kept in this app session until cleared. Temporary encoding files "
+           "are cleaned after use. Browser refresh/close is not a guaranteed deletion event. "
+           "Files already downloaded onto your device are unaffected.")
+
 st.caption("DATA 255 · COCO-WholeBody · 73 currently modeled / 133 defined")
 st.info(
     "The reference skeleton is illustrative, not model output. The trained CNN predicts "
@@ -334,8 +532,42 @@ def render_skeleton(points, *, widget_prefix, background=None, predicted=False):
         st.write(", ".join(map(str, sorted(st.session_state.selection))) or "None")
 
 
-tab1, tab2, tab3 = st.tabs([
-    "Keypoint Selector", "Image & Video", "Model Predictions"
+def draw_live_overlay(frame_bgr: np.ndarray, predicted73: np.ndarray,
+                      selected_ids: set[int], min_confidence: float,
+                      show_ids: bool = False) -> np.ndarray:
+    """Draw supported COCO-WholeBody landmarks on a webcam frame (pixel coordinates)."""
+    result = frame_bgr.copy()
+    h, w = result.shape[:2]
+    points = wholebody_points(predicted73)
+    valid = set()
+
+    for point_id in selected_ids & SUPPORTED:
+        x, y, score = points[point_id]
+        if (np.isfinite([x, y, score]).all() and score >= min_confidence
+                and 0 <= x < w and 0 <= y < h):
+            valid.add(point_id)
+
+    def bgr_color(point_id):
+        code = color_for(point_id).lstrip("#")
+        return tuple(int(code[i:i+2], 16) for i in (4, 2, 0))
+
+    for a, b in EDGES:
+        if a in valid and b in valid:
+            start = tuple(np.rint(points[a, :2]).astype(int))
+            end = tuple(np.rint(points[b, :2]).astype(int))
+            cv2.line(result, start, end, bgr_color(a), 2, cv2.LINE_AA)
+
+    for point_id in valid:
+        x, y = np.rint(points[point_id, :2]).astype(int)
+        cv2.circle(result, (int(x), int(y)), 3, bgr_color(point_id), -1, cv2.LINE_AA)
+        if show_ids:
+            cv2.putText(result, str(point_id), (int(x) + 4, int(y) - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
+    return result
+
+
+tab1, tab2, tab3, tab4 = st.tabs([
+    "Keypoint Selector", "Image & Video", "Model Predictions", "Live Camera"
 ])
 
 with tab1:
@@ -381,6 +613,18 @@ with tab1:
             st.multiselect("All selected keypoints", options=list(range(133)),
                            format_func=label, key="selection")
         # The selection multiselect remains instantiated even when the expander is collapsed.
+        st.radio(
+            "Keypoint selection mode",
+            ["Visualization only", "Prepare model input (mask)"],
+            key="selection_mode",
+            help="Mask excluded landmarks in exported Stage 1 prediction arrays. "
+                 "Stage 1 always runs on the unmodified RGB image. "
+                 "Downstream Stage 2/3 inference is not connected yet.",
+        )
+        if st.session_state.selection_mode == "Prepare model input (mask)":
+            st.info("Model-input preparation is enabled: exported 73-point arrays will "
+                    "have excluded landmarks zeroed out. This does not change Stage 1 "
+                    "predictions or run Stage 2/3 recognition.")
         chosen = set(st.session_state.selection)
         modeled = chosen & SUPPORTED
         unavailable = chosen - SUPPORTED
@@ -411,7 +655,7 @@ with tab2:
     source = st.radio("Media type", ["Image", "Video"], horizontal=True)
     if source == "Image":
         uploaded_image = st.file_uploader(
-            "Upload an ASL image", type=["png", "jpg", "jpeg"], key="asl_image"
+            "Upload an ASL image", type=["png", "jpg", "jpeg"], key=f"asl_image_{st.session_state.private_media_generation}"
         )
         if uploaded_image is not None:
             rgb_image = np.asarray(Image.open(uploaded_image).convert("RGB"))
@@ -431,12 +675,12 @@ with tab2:
                 render_skeleton(wholebody_points(result["points"]),
                                 widget_prefix="stage1_image", background=rgb_image, predicted=True)
                 st.download_button("Download image predictions (.npy)",
-                                   data=npy_bytes(result["points"]),
+                                   data=npy_bytes(model_ready_points(result["points"])),
                                    file_name="image_stage1_predictions.npy",
                                    mime="application/octet-stream")
     else:
         video = st.file_uploader("Upload an ASL video", type=["mp4", "mov", "avi"],
-                                 key="asl_video")
+                                 key=f"asl_video_{st.session_state.private_media_generation}")
         if video is not None:
             st.video(video)
             suffix = os.path.splitext(video.name)[1]
@@ -486,11 +730,109 @@ with tab2:
                                                 widget_prefix="stage1_video", background=rgb_frame,
                                                 predicted=True)
                                 st.download_button("Download frame predictions (.npy)",
-                                                   data=npy_bytes(result["points"]),
+                                                   data=npy_bytes(model_ready_points(result["points"])),
                                                    file_name=f"frame_{frame_idx + 1}_stage1.npy",
                                                    mime="application/octet-stream")
                         else:
                             st.error("Could not decode the selected frame.")
+                        # Full-video Stage 1 inference is separate from single-frame inference.
+                        st.divider()
+                        st.subheader("Full-video Stage 1 extraction")
+                        st.caption(
+                            "Run the trained detector on every decoded video frame. "
+                            "Export a (T, 73, 3) NumPy sequence: x, y, confidence. "
+                            "Word classification is not yet available; annotated MP4 export is available after extraction."
+                        )
+                        video_key = hashlib.sha256(video.getvalue()).hexdigest()
+                        full_result = st.session_state.get("full_video_stage1_result")
+                        if st.button("Extract keypoints from entire video", key="extract_full_video",
+                                     disabled=not CHECKPOINT.is_file(), type="primary"):
+                            st.session_state.pop("full_video_stage1_result", None)
+                            progress = st.progress(0, text="Starting full-video inference...")
+                            try:
+                                # Reset to the beginning after the selected-frame preview.
+                                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                                predictions = []
+                                frame_count = 0
+                                while True:
+                                    ok, next_frame = cap.read()
+                                    if not ok:
+                                        break
+                                    rgb_next = cv2.cvtColor(next_frame, cv2.COLOR_BGR2RGB)
+                                    predicted = np.asarray(infer_stage1(rgb_next), dtype=np.float32)
+                                    predictions.append(predicted)
+                                    frame_count += 1
+                                    if frame_count == 1 or frame_count % 10 == 0:
+                                        fraction = min(frame_count / total_frames, 1.0)
+                                        progress.progress(fraction, text=f"Processed {frame_count} / ~{total_frames} frames")
+                                if not predictions:
+                                    raise ValueError("No decodable video frames found.")
+                                sequence = np.stack(predictions, axis=0)
+                                st.session_state["full_video_stage1_result"] = {
+                                    "video_key": video_key,
+                                    "sequence": sequence,
+                                    "fps": float(cap.get(cv2.CAP_PROP_FPS)),
+                                }
+                                progress.progress(1.0, text=f"Finished: {frame_count} frames")
+                                st.success(f"Extracted {frame_count} frames: shape {sequence.shape}")
+                            except Exception as exc:
+                                progress.empty()
+                                st.error(f"Full-video inference failed: {exc}")
+                            full_result = st.session_state.get("full_video_stage1_result")
+                        if full_result is not None and full_result["video_key"] == video_key:
+                            sequence = full_result["sequence"]
+                            st.success(f"Full-video predictions ready: {sequence.shape}")
+                            st.caption(f"Decoded frames: {sequence.shape[0]} · "
+                                       f"Reported source FPS: {full_result['fps']:.2f}. "
+                                       "Selections are applied on export, not during Stage 1 inference.")
+                            exported = model_ready_points(sequence)
+                            st.download_button(
+                                "Download full-video keypoints (.npy)",
+                                data=array_npy_bytes(exported),
+                                file_name=f"{Path(video.name).stem}_stage1_full.npy",
+                                mime="application/octet-stream",
+                                key="full_video_download",
+                            )
+                            st.markdown("**Annotated video playback and export**")
+                            overlay_conf = st.slider(
+                                "Annotated video confidence", 0.0, 1.0, 0.2, 0.05,
+                                key="full_video_overlay_conf")
+                            if st.button("Generate annotated video", key="generate_full_annotated"):
+                                try:
+                                    with st.spinner("Encoding annotated video..."):
+                                        annotated_bytes, h264 = export_uploaded_annotated_mp4(
+                                            path, sequence, set(st.session_state.selection) & SUPPORTED,
+                                            overlay_conf, full_result["fps"])
+                                    st.session_state["full_video_annotated"] = {
+                                        "video_key": video_key,
+                                        "bytes": annotated_bytes,
+                                        "h264": h264,
+                                    }
+                                except Exception as exc:
+                                    st.error(f"Video encoding failed: {exc}")
+                            rendered_video = st.session_state.get("full_video_annotated")
+                            if rendered_video is not None and rendered_video["video_key"] == video_key:
+                                if rendered_video["h264"]:
+                                    st.video(rendered_video["bytes"])
+                                else:
+                                    st.warning("MP4 encoded with mp4v. Download works, but browser playback "
+                                               "may require H.264; install imageio-ffmpeg for conversion.")
+                                st.download_button("Download annotated video (.mp4)",
+                                                   data=rendered_video["bytes"],
+                                                   file_name=f"{Path(video.name).stem}_annotated.mp4",
+                                                   mime="video/mp4", key="full_video_annotated_download")
+                            # Inspect sequence frame matching the existing video preview.
+                            if frame_idx < sequence.shape[0]:
+                                with st.expander("Preview extracted keypoints for selected frame"):
+                                    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                                    preview_ok, preview_bgr = cap.read()
+                                    bg = (cv2.cvtColor(preview_bgr, cv2.COLOR_BGR2RGB)
+                                          if preview_ok else None)
+                                    render_skeleton(
+                                        wholebody_points(sequence[frame_idx]),
+                                        widget_prefix="full_video_preview", background=bg,
+                                        predicted=True,
+                                    )
                     else:
                         st.error("Could not determine the video frame count.")
             finally:
@@ -503,9 +845,9 @@ with tab3:
     st.subheader("Model Prediction Viewer")
     st.caption("Load previously generated keypoint coordinates. This tab does not run the CNN.")
     uploaded = st.file_uploader("Keypoint sequence (.npy)", type=["npy"],
-                                key="model_npy")
+                                key=f"model_npy_{st.session_state.private_media_generation}")
     frame_img = st.file_uploader("Corresponding frame image (optional)",
-                                 type=["png", "jpg", "jpeg"], key="model_image")
+                                 type=["png", "jpg", "jpeg"], key=f"model_image_{st.session_state.private_media_generation}")
     if uploaded is None:
         st.info("Upload a .npy file shaped (T, 73, 3) to view Stage 1 predictions, "
                 "or (T, 133, 3) for a future detector.")
@@ -540,9 +882,161 @@ with tab3:
             st.success(f"Loaded prediction frame {fi + 1} of {arr.shape[0]}")
             render_skeleton(points, widget_prefix="prediction", background=background,
                             predicted=True)
+            if arr.shape[1] == 73:
+                export_arr = model_ready_points(arr)
+                st.download_button(
+                    "Download sequence for selected mode (.npy)",
+                    data=array_npy_bytes(export_arr),
+                    file_name="selected_stage1_sequence.npy",
+                    mime="application/octet-stream",
+                )
         except (ValueError, OSError) as exc:
             st.error(f"Could not load predictions: {exc}")
 
 st.divider()
-st.caption("Keypoint selection currently changes visualization and JSON export only; "
-           "it does not alter trained model inputs or enable inference for the other 60 landmarks.")
+st.caption("Stage 1 always processes full RGB frames and predicts its 73 supported landmarks. "
+           "Selection can filter displays or prepare masked 73-landmark arrays for future "
+           "downstream models; it does not change Stage 1 inference or add the other 60 landmarks.")
+
+with tab4:
+    st.subheader("Live Stage 1 Keypoint Tracking and Clip Recording")
+    st.caption("Webcam → Stage 1 → 73 modeled keypoints, with optional short recording. "
+               "Recordings store frames and their Stage 1 predictions, not ASL word labels.")
+    if not CHECKPOINT.is_file():
+        st.error(f"Stage 1 checkpoint not found: {CHECKPOINT}")
+        st.info("Place the trusted trained best.pt at the expected location, then rerun.")
+    else:
+        try:
+            import av
+            from streamlit_webrtc import webrtc_streamer, WebRtcMode
+        except ImportError:
+            st.error("Install camera dependencies: python -m pip install streamlit-webrtc av")
+        else:
+            conf_col, ids_col, duration_col = st.columns([2, 1, 1])
+            live_confidence = conf_col.slider("Live minimum confidence", 0.0, 1.0, 0.2, 0.05)
+            live_ids = ids_col.checkbox("Show live IDs", value=False)
+            record_seconds = duration_col.selectbox("Max clip (sec)", [5, 10, 12], index=1)
+            live_selected = set(st.session_state.selection) & SUPPORTED
+            st.caption(f"Showing {len(live_selected)} selected supported landmarks. "
+                       "Edit selection in the first tab before starting the camera.")
+            if not live_selected:
+                st.warning("No supported keypoints selected; use Current 73 in Keypoint Selector.")
+            try:
+                live_model, live_args, live_device, live_predict_clip = load_stage1()
+            except Exception as exc:
+                st.error(f"Could not load Stage 1: {exc}")
+            else:
+                if "webcam_recorder" not in st.session_state:
+                    st.session_state.webcam_recorder = WebcamClipRecorder()
+                recorder = st.session_state.webcam_recorder
+                infer_lock = shared_inference_lock()
+
+                # On every Streamlit rerun this callback reuses the same recorder.
+                # No st.* API is ever used inside this WebRTC processing thread.
+                def live_callback(frame):
+                    bgr = frame.to_ndarray(format="bgr24")
+                    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+                    try:
+                        with infer_lock:
+                            output = live_predict_clip(
+                                live_model, rgb[None, ...],
+                                live_args["input_h"], live_args["input_w"], live_device)
+                        if output.shape != (1, len(WHOLEBODY_INDICES), 3):
+                            raise ValueError(f"Unexpected prediction shape: {output.shape}")
+                        recorder.append(bgr, output[0])
+                        annotated = draw_live_overlay(
+                            bgr, output[0], live_selected, live_confidence, live_ids)
+                    except Exception:
+                        annotated = bgr.copy()
+                        cv2.putText(annotated, "Stage 1 failed - see terminal", (12, 30),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2)
+                        import traceback
+                        traceback.print_exc()
+                    return av.VideoFrame.from_ndarray(annotated, format="bgr24")
+
+                st.info("Click START and allow camera access. Then select Record clip. "
+                        "Stop the clip before turning the camera off.")
+                stream_context = webrtc_streamer(
+                    key="asl-stage1-live",
+                    mode=WebRtcMode.SENDRECV,
+                    video_frame_callback=live_callback,
+                    media_stream_constraints={"video": {"width": {"ideal": 640},
+                                                        "height": {"ideal": 480}},
+                                              "audio": False},
+                    async_processing=True,
+                )
+
+                # Buttons below always interact with the recorder shared by the callback.
+                # A Streamlit rerun may briefly interrupt the video stream.
+                recording_now, captured_count = recorder.status()
+                st.caption(f"Recording status: {'ACTIVE' if recording_now else 'idle'} · "
+                           f"{captured_count} processed frames captured (max 10 sampled FPS)")
+                start_col, stop_col = st.columns(2)
+                if start_col.button("Record clip", disabled=recording_now or not stream_context.state.playing,
+                                    type="primary", use_container_width=True):
+                    st.session_state.pop("webcam_last_clip", None)
+                    st.session_state.pop("webcam_annotated", None)
+                    recorder.start(record_seconds)
+                    st.rerun()
+                if stop_col.button("Stop recording / save clip", disabled=captured_count == 0,
+                                   use_container_width=True):
+                    clip = recorder.stop_and_snapshot()
+                    if clip is not None:
+                        st.session_state["webcam_last_clip"] = clip
+                    st.rerun()
+                st.caption("If maximum clip duration is reached, select Stop recording / save clip "
+                           "to finalize it. Only frames successfully processed by Stage 1 are captured.")
+
+                clip = st.session_state.get("webcam_last_clip")
+                if clip is not None:
+                    sequence = clip["sequence"]
+                    timestamps = clip["times"]
+                    if len(timestamps) > 1:
+                        clip_fps = min(30.0, max(1.0, (len(timestamps) - 1) /
+                                                max(float(timestamps[-1] - timestamps[0]), .001)))
+                    else:
+                        clip_fps = 1.0
+                    st.success(f"Saved {len(sequence)} Stage 1 frames · shape {sequence.shape}")
+                    st.caption(f"Approximate processed-frame rate: {clip_fps:.1f} FPS. "
+                               "This is a sampling of the webcam, not guaranteed constant-rate capture.")
+                    st.download_button(
+                        "Download recorded keypoints (.npy)",
+                        data=array_npy_bytes(model_ready_points(sequence)),
+                        file_name="webcam_recording_stage1.npy",
+                        mime="application/octet-stream",
+                        key="webcam_export_npy",
+                    )
+                    st.download_button(
+                        "Download recording metadata (.json)",
+                        data=json.dumps({"frames":len(sequence), "approx_fps":clip_fps,
+                                         "shape":list(sequence.shape),
+                                         "selection_mode":st.session_state.get("selection_mode", "Visualization only")},
+                                        indent=2),
+                        file_name="webcam_recording_metadata.json", mime="application/json",
+                        key="webcam_export_metadata",
+                    )
+                    if st.button("Generate recorded video (.mp4)", key="webcam_make_video"):
+                        try:
+                            with st.spinner("Encoding your recorded clip..."):
+                                video_bytes, is_h264 = export_annotated_mp4(
+                                    clip["frames"], sequence, live_selected, live_confidence,
+                                    live_ids, fps=clip_fps)
+                            st.session_state["webcam_annotated"] = (video_bytes, is_h264)
+                        except Exception as exc:
+                            st.error(f"Could not encode recorded clip: {exc}")
+                    recorded_video = st.session_state.get("webcam_annotated")
+                    if recorded_video is not None:
+                        if recorded_video[1]:
+                            st.video(recorded_video[0])
+                        else:
+                            st.warning("MP4 uses mp4v, which may not play in the browser. "
+                                       "Install imageio-ffmpeg to enable H.264 conversion.")
+                        st.download_button("Download recorded annotated clip (.mp4)",
+                                           data=recorded_video[0],
+                                           file_name="webcam_recording_annotated.mp4",
+                                           mime="video/mp4", key="webcam_clip_download")
+                    st.info("Future Stage 2/3: feed the saved keypoint sequence to the trained "
+                            "temporal/refinement and Bi-GRU models for word recognition. "
+                            "No ASL classification is performed in this version.")
+                st.caption("Video overlay assumes predict_clip returns original-frame pixel "
+                           "coordinates. Test tracking alignment before presenting the demo.")
