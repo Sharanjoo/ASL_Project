@@ -319,3 +319,160 @@ def draw_keypoints(frame_rgb: np.ndarray, keypoints: np.ndarray, min_score: floa
                 cv2.circle(img, (int(round(x * scale)), int(round(y * scale))), 2 * scale // 2 + 1,
                            colors[g], -1, cv2.LINE_AA)
     return img
+
+
+# --------------------------------------------------------------------------- #
+# Experimental live word prediction (webcam)
+# --------------------------------------------------------------------------- #
+def to_crop_space(keypoints: np.ndarray, box, frame_w: int, frame_h: int,
+                  size: int = FRAME_SIZE) -> np.ndarray:
+    """Map full-frame keypoints into the square signer crop the models expect.
+
+    Matches sample_frames.square_crop (box given) or letterbox (box None) without
+    re-running Stage 1 on the cropped frames.
+    """
+    if box is None:
+        side = float(max(frame_w, frame_h))
+        left, top = -(side - frame_w) / 2.0, -(side - frame_h) / 2.0
+    else:
+        x1, y1, x2, y2 = box
+        side = float(max(x2 - x1, y2 - y1))
+        left, top = (x1 + x2) / 2.0 - side / 2.0, (y1 + y2) / 2.0 - side / 2.0
+    out = np.asarray(keypoints, dtype=np.float32).copy()
+    out[..., 0] = (out[..., 0] - left) / side * size
+    out[..., 1] = (out[..., 1] - top) / side * size
+    return out
+
+
+def hands_active(keypoints: np.ndarray, min_score: float = 0.3, min_motion: float = 0.04) -> bool:
+    """True when at least one hand is visible in most frames and actually moves.
+
+    keypoints are in the 224 crop; min_motion is the hand centre's range of
+    movement as a fraction of the crop side.
+    """
+    for g in ("left_hand", "right_hand"):
+        pts = keypoints[:, GROUP_SLICES[g]]
+        conf = pts[..., 2].mean(axis=1)
+        good = conf >= min_score
+        if good.mean() < 0.5:
+            continue
+        w = np.clip(pts[good][..., 2], 1e-6, None)
+        centre = (pts[good][..., :2] * w[..., None]).sum(1) / w.sum(1)[:, None]
+        if np.ptp(centre, axis=0).max() / FRAME_SIZE >= min_motion:
+            return True
+    return False
+
+
+class LiveWordPredictor:
+    """Rolling-window word prediction from live Stage 1 keypoints.
+
+    Thread-safe: push() is called from the webcam callback thread, state() from
+    either thread. Every update_every_s it takes the last window_s seconds of
+    keypoints, maps them into crop space, samples 16 frames and runs Stage 2 +
+    Stage 3 (a few ms on the CPU). Probabilities are smoothed over updates and a
+    word is marked "stable" once the top word repeats stable_updates times.
+    """
+
+    def __init__(self, recognizer: Recognizer, model_name: str = PRIMARY_MODEL,
+                 window_s: float = 3.0, update_every_s: float = 0.5, min_frames: int = 8,
+                 stable_updates: int = 3, smoothing: float = 0.5):
+        import threading
+        from collections import deque
+
+        self.labels = recognizer.labels
+        self.classifier, self.refiner = recognizer.configs[model_name]
+        self.window_s, self.update_every_s = window_s, update_every_s
+        self.min_frames, self.smoothing = min_frames, smoothing
+        self._lock = threading.Lock()
+        self._buffer = deque()
+        self._size = (1, 1)
+        self._last_update = 0.0
+        self._ema = None
+        self._history = deque(maxlen=stable_updates)
+        self._state = {"status": "collecting", "word": None, "prob": 0.0, "top3": [], "frames": 0}
+
+    def configure(self, window_s: float) -> None:
+        with self._lock:
+            self.window_s = float(window_s)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._buffer.clear()
+            self._ema = None
+            self._history.clear()
+            self._state = {"status": "collecting", "word": None, "prob": 0.0, "top3": [], "frames": 0}
+
+    def state(self) -> dict:
+        with self._lock:
+            return dict(self._state)
+
+    def push(self, t: float, keypoints73: np.ndarray, frame_w: int, frame_h: int) -> None:
+        with self._lock:
+            self._buffer.append((t, np.asarray(keypoints73, dtype=np.float32)))
+            self._size = (frame_w, frame_h)
+            while self._buffer and self._buffer[0][0] < t - self.window_s:
+                self._buffer.popleft()
+            due = t - self._last_update >= self.update_every_s
+            if due:
+                self._last_update = t
+                snapshot = [k for _, k in self._buffer]
+                size = self._size
+        if due:
+            self._update(snapshot, size)
+
+    def _set(self, **state) -> None:
+        with self._lock:
+            self._state = state
+
+    def _update(self, frames: list[np.ndarray], size: tuple[int, int]) -> None:
+        n = len(frames)
+        if n < self.min_frames:
+            self._set(status="collecting", word=None, prob=0.0, top3=[], frames=n)
+            return
+        kps = np.stack(frames)
+        box = signer_box_from_keypoints(kps, *size)
+        crop = to_crop_space(kps, box, *size)
+        if not hands_active(crop):
+            with self._lock:
+                self._ema = None
+                self._history.clear()
+            self._set(status="idle", word=None, prob=0.0, top3=[], frames=n)
+            return
+        seq = crop[even_indices(n, NUM_FRAMES)]
+        if self.refiner is not None:
+            seq = Recognizer.refine(seq, self.refiner)
+        probs = Recognizer.classify(seq, self.classifier)
+        with self._lock:
+            a = self.smoothing
+            self._ema = probs if self._ema is None else a * probs + (1 - a) * self._ema
+            ema = self._ema
+            order = np.argsort(ema)[::-1][:3]
+            self._history.append(int(order[0]))
+            stable = (len(self._history) == self._history.maxlen
+                      and len(set(self._history)) == 1)
+        top3 = [(self.labels[i], float(ema[i])) for i in order]
+        self._set(status="stable" if stable else "updating", word=top3[0][0],
+                  prob=top3[0][1], top3=top3, frames=n)
+
+
+def draw_live_word(frame_bgr: np.ndarray, state: dict) -> np.ndarray:
+    """Draw the live word prediction as a banner at the bottom of a BGR frame (in place)."""
+    h, w = frame_bgr.shape[:2]
+    bar = max(44, h // 8)
+    overlay = frame_bgr.copy()
+    cv2.rectangle(overlay, (0, h - bar), (w, h), (20, 20, 20), -1)
+    cv2.addWeighted(overlay, 0.65, frame_bgr, 0.35, 0, dst=frame_bgr)
+    font, y = cv2.FONT_HERSHEY_SIMPLEX, h - bar // 2 + 6
+    status = state.get("status")
+    if status in ("updating", "stable"):
+        color = (80, 220, 80) if status == "stable" else (0, 210, 255)  # green / amber (BGR)
+        main = f"{state['word'].upper()}  {state['prob']:.0%}"
+        cv2.putText(frame_bgr, main, (12, y), font, 0.8, color, 2, cv2.LINE_AA)
+        rest = "   ".join(f"{wd} {p:.0%}" for wd, p in state["top3"][1:])
+        cv2.putText(frame_bgr, rest, (min(w - 10, 12 + 20 * len(main)), y), font, 0.5,
+                    (200, 200, 200), 1, cv2.LINE_AA)
+    else:
+        msg = (f"Live word: collecting frames ({state.get('frames', 0)})" if status == "collecting"
+               else "Live word: waiting for signing (raise and move a hand)")
+        cv2.putText(frame_bgr, msg, (12, y), font, 0.55, (180, 180, 180), 1, cv2.LINE_AA)
+    return frame_bgr

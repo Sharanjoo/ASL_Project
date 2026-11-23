@@ -423,6 +423,7 @@ def clear_private_media():
         "webcam_recorder", "webcam_last_clip", "webcam_annotated",
         "full_video_stage1_result", "full_video_annotated",
         "stage1_image_result", "stage1_video_result", "word_recognition_result",
+        "live_word_predictor",
     ):
         st.session_state.pop(key, None)
     # A new key resets file uploaders on the next rerun.
@@ -930,6 +931,34 @@ with tab4:
                        "Edit selection in the first tab before starting the camera.")
             if not live_selected:
                 st.warning("No supported keypoints selected; use Current 73 in Keypoint Selector.")
+
+            # Experimental: live word prediction from the rolling Stage 1 keypoints.
+            from models.asl_pipeline import LiveWordPredictor, draw_live_word, missing_files
+            live_predictor = None
+            if missing_files():
+                st.caption("Live word prediction needs runs/pipeline/ (Stage 2/3 checkpoints).")
+            else:
+                word_col, window_col = st.columns([2, 1])
+                live_word_on = word_col.toggle(
+                    "Experimental: live word prediction (Stages 2-3)", value=False,
+                    key="live_word_toggle",
+                    help="Every 0.5 s, the last few seconds of live keypoints go through Stage 2 "
+                         "and Stage 3. Less accurate than recording a clip and using the Word "
+                         "Recognition tab: no sign start/end detection, full-frame keypoints.")
+                live_window = window_col.slider("Word window (sec)", 2.0, 4.0, 3.0, 0.5,
+                                                key="live_word_window", disabled=not live_word_on)
+                if live_word_on:
+                    try:
+                        from word_recognition_tab import load_recognizer
+                        if "live_word_predictor" not in st.session_state:
+                            st.session_state.live_word_predictor = LiveWordPredictor(load_recognizer())
+                        live_predictor = st.session_state.live_word_predictor
+                        live_predictor.configure(window_s=live_window)
+                        st.caption("Sign one word at a time, then lower your hands. Amber = still "
+                                   "deciding, green = stable for 3 updates in a row.")
+                    except Exception as exc:
+                        st.error(f"Could not load Stages 2-3: {exc}")
+                        live_predictor = None
             try:
                 live_model, live_args, live_device, live_predict_clip = load_stage1()
             except Exception as exc:
@@ -955,6 +984,14 @@ with tab4:
                         recorder.append(bgr, output[0])
                         annotated = draw_live_overlay(
                             bgr, output[0], live_selected, live_confidence, live_ids)
+                        if live_predictor is not None:
+                            try:
+                                live_predictor.push(time.monotonic(), output[0],
+                                                    bgr.shape[1], bgr.shape[0])
+                                draw_live_word(annotated, live_predictor.state())
+                            except Exception:
+                                import traceback
+                                traceback.print_exc()
                     except Exception:
                         annotated = bgr.copy()
                         cv2.putText(annotated, "Stage 1 failed - see terminal", (12, 30),

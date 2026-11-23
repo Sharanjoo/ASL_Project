@@ -17,7 +17,7 @@ The app has five tabs:
 - **Keypoint Selector:** Explore and select any of the 133 COCO-WholeBody landmarks; export selected IDs as JSON.
 - **Image & Video:** Upload media, run trained Stage 1 detection on an image or selected video frame, inspect overlays, and download prediction arrays. Video frames can also be downloaded as original-resolution PNG files.
 - **Model Predictions:** Load saved `.npy` predictions, optionally add a matching frame image, and inspect/filter overlays without rerunning the detector.
-- **Live Camera:** Stream the webcam through Stage 1 and record short clips (keypoints, metadata and annotated MP4).
+- **Live Camera:** Stream the webcam through Stage 1 and record short clips (keypoints, metadata and annotated MP4). An **experimental live word prediction** toggle runs Stages 2-3 on the last 2–4 seconds of live keypoints every 0.5 s and overlays the predicted word (amber = deciding, green = stable).
 - **Word Recognition (Stages 1-3):** Predict the signed word and analyse keypoints over time (see section 3, Tab 5).
 
 **Important distinction:** The 133-point reference skeleton in Tab 1 is illustrative, not output from the model. The trained detector currently predicts only 73 of the 133 landmarks. Changing landmark selection controls **what is visualized and exported**, not which outputs the model produces or how it is trained.
@@ -286,7 +286,7 @@ The image, video-frame, saved NPY, confidence, selection, and JSON interactions 
 - **Fixed vocabulary:** Stage 3 knows only the 100 WLASL100 words; adding words requires new training data and retraining Stage 3.
 - **Modest accuracy:** 32.3% top-1 / 60.2% top-5 on clean WLASL100 test clips; lower on new signers and settings.
 - **Rebuilt frame sampler:** `data/wlasl/sample_frames.py` was reconstructed from this README's description because the original was never committed; check it with `tools/verify_sampler.py` before relying on video-input accuracy.
-- **Recorded clips only:** word recognition runs on a finished upload or recording, not continuously on the live stream.
+- **Live word prediction is experimental:** it has no sign start/end detection (it only predicts while a hand is visible and moving), uses keypoints from the full camera frame rather than a re-run on the signer crop, and gets fewer than 16 real frames per window on a laptop CPU. Expect lower accuracy than recording a clip and using the Word Recognition tab.
 - **Fixed 73-point detector:** Additional landmarks can be selected for visualization/planning, but the current model does not produce them.
 - **Selection is not model reconfiguration:** Changing selected IDs does not alter training, architecture, learned parameters, or detector outputs.
 - **Prediction-image alignment requires matching coordinates:** A corresponding original-resolution frame should be used for reliable overlays.
