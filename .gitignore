@@ -28,3 +28,6 @@ __pycache__/
 # Extra virtual environments (baseline extractors)
 .venv_*/
 .DS_Store
+
+# Local test videos for tools/verify_sampler.py (WLASL clips, C-UDA: keep private)
+check_videos/

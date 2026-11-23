@@ -285,7 +285,7 @@ The image, video-frame, saved NPY, confidence, selection, and JSON interactions 
 
 - **Fixed vocabulary:** Stage 3 knows only the 100 WLASL100 words; adding words requires new training data and retraining Stage 3.
 - **Modest accuracy:** 32.3% top-1 / 60.2% top-5 on clean WLASL100 test clips; lower on new signers and settings.
-- **Rebuilt frame sampler:** `data/wlasl/sample_frames.py` was reconstructed from this README's description because the original was never committed; check it with `tools/verify_sampler.py` before relying on video-input accuracy.
+- **Rebuilt frame sampler:** `data/wlasl/sample_frames.py` was reconstructed from this README's description because the original was never committed. Verified with `tools/verify_sampler.py` on WLASL clip 69225: Stage 1 keypoints match the original run's (median error 0.0 px, mean 0.2 px over 990 points).
 - **Live word prediction is experimental:** it has no sign start/end detection (it only predicts while a hand is visible and moving), uses keypoints from the full camera frame rather than a re-run on the signer crop, and gets fewer than 16 real frames per window on a laptop CPU. Expect lower accuracy than recording a clip and using the Word Recognition tab.
 - **Fixed 73-point detector:** Additional landmarks can be selected for visualization/planning, but the current model does not produce them.
 - **Selection is not model reconfiguration:** Changing selected IDs does not alter training, architecture, learned parameters, or detector outputs.
